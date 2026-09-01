@@ -71,13 +71,14 @@ python main.py --seed
 
 ## 5. 주기적 실행 (cron)
 
-리눅스/맥 기준, 1시간마다 실행하려면:
+**본인 PC 또는 상시 켜져 있는 서버**에서 등록해야 합니다(꺼져 있으면 당연히 실행되지 않습니다).
+매일 오전 9시에 한 번 실행하려면:
 ```bash
 crontab -e
 ```
 아래 줄 추가 (경로는 실제 프로젝트 경로로 수정):
 ```
-0 * * * * cd /path/to/project/src && /usr/bin/python3 main.py >> /path/to/project/data/run.log 2>&1
+0 9 * * * cd /path/to/project/src && /usr/bin/python3 main.py >> /path/to/project/data/run.log 2>&1
 ```
 
 ## 6. 알아두어야 할 한계
