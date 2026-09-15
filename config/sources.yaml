@@ -105,12 +105,18 @@ sources:
     url: https://itpe.or.kr/main/ko/index.html
     base: https://itpe.or.kr/main/ko/
     enabled: true
+    # 로그인 폼 필드명은 브라우저 렌더링 진단으로 확인한 실제 값이다.
+    # (추정값 userId/userPw는 틀렸다)
     login:
-      url: https://www.itpe.or.kr/member/loginProc
-      id_field: userId
-      pw_field: userPw
+      url: https://itpe.or.kr/modules/member/memberProcess.php
+      id_field: userID
+      pw_field: password
       id_env: ITPE_ID
       pw_env: ITPE_PW
+      extra:
+        memberMode: login
+        goURL: /main/ko/
+        idMemory: N
       success_marker: 로그아웃
     row_selector: "table tbody tr, ul li"
     title_selector: "a"
