@@ -26,8 +26,13 @@ class Posting:
 
     @property
     def key(self) -> str:
-        """중복 제거 키. URL 우선, 없으면 제목 해시."""
-        basis = self.url.strip() or f"{self.source_id}:{normalize(self.title)}"
+        """중복 제거 키 = URL + 제목.
+
+        onclick 기반 게시판은 상세 링크를 못 만들어 목록 URL을 그대로 쓴다.
+        URL만으로 키를 잡으면 그런 글이 전부 한 건으로 뭉개진다(실측 83→13).
+        같은 URL의 서로 다른 글은 제목으로 구분한다.
+        """
+        basis = f"{self.url.strip()}|{normalize(self.title)}"
         return hashlib.sha1(basis.encode("utf-8")).hexdigest()[:16]
 
     @property

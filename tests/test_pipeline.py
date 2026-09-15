@@ -251,6 +251,79 @@ def test_navigation_links_are_not_postings(monkeypatch_get):
     print("  ✓ 네비게이션 링크 배제: 글 번호 있는 게시글만 채택")
 
 
+# 실제 운영 설정(config/sources.yaml)으로 검증한다. 픽스처가 아니라 배포되는
+# 설정 그 자체를 대상으로 해야 '테스트는 통과하는데 메일은 엉망'을 막을 수 있다.
+# 제목은 전부 실제 수집 로그와 발송된 메일에서 가져왔다.
+OBSERVED_TITLES = [
+    # 감리협회 실제 공고 — 채택돼야 한다
+    ("정보통신 설비 유지관리 비상주 선임자 채용", True),
+    ("정보통신감리원 모집공고", True),
+    ("비상주 정보통신기술자 초급, 중급, 고급, 특급 모집", True),
+    ("★급★ 중급 통신 감리원 상주 모십니다.[서울시 강동구, 상주]", True),
+    ("[구인]문엔지니어링(주) 감리 경력자 정보통신기술사 모집안내", True),
+    # 이미 끝난 공고 — 지원할 수 없으니 제외
+    ("서울, 수도권 현장 정보통신기술사 모십니다.  ****** 구인 완료 ******", False),
+    ("통신(중급이상) 상주 모십니다.(안산시) *모집완료*", False),
+    ("마감되었습니다.", False),
+    # 초급 공고 — 기술사 보유자 대상이 아니므로 의도적으로 제외
+    ("정보통신초급 채용합니다(비상근 가능)", False),
+    # 협회 사이트 카테고리 메뉴
+    ("기술사 활동", False),
+    ("건축·토목·광업자원", False),
+    ("전기·전자·정보기술", False),
+    ("경영·회계·사무", False),
+    # 협회 사이트 뉴스 기사
+    ('2025년 2월 27일 아이티데일리 "정보공학기술사회, 제35차 정기총회 개최"', False),
+    # 실제 발송 메일에 실렸던 오탐 (사람인 검색 결과 패딩)
+    ("무등휴요양병원 영양실장 모집합니다.", False),
+    ("상무초밥 본사 프랜차이즈 지부장 모집", False),
+    ("성균관대학교 교직원(정규직) 경력채용 공고", False),
+    ("Flutter 프론트엔드 개발자 채용", False),
+    ("백엔드 시니어 개발자 채용", False),
+    ("자동차 부품 제조업 생산(공정현장관리)/생산관리 인재 채용", False),
+    ("부산 소재 공공기관 상주 근무 엔지니어 모집(중급 이상)", False),
+    ("(주)유원인포텍 네트워크 스위치 영업 사원 모집", False),
+    ("[경기] AV / AI ICT / 화상회의 관련 기술정규직 모집", False),
+    ("써키트플렉스 F-PCB 금도금 공정 담당자 채용", False),
+    # 타 분야 기술사
+    ("토목 기술사 설계 PM 모집", False),
+    ("건축기술사 현장소장 채용", False),
+]
+
+
+def test_real_config_against_observed_titles():
+    """배포되는 설정으로 실측 제목 26건을 판정한다."""
+    import yaml
+    cfg = yaml.safe_load(
+        (Path(__file__).resolve().parent.parent / "config" / "sources.yaml")
+        .read_text(encoding="utf-8")
+    )
+    m = KeywordMatcher(cfg["keywords"])
+
+    wrong = []
+    for title, expected in OBSERVED_TITLES:
+        got = bool(m.has_hiring_signal(title) and m.match(title))
+        if got != expected:
+            wrong.append(f"{'오탐' if got else '누락'}: {title}")
+    assert not wrong, "\n      " + "\n      ".join(wrong)
+    kept = sum(1 for _, e in OBSERVED_TITLES if e)
+    print(f"  ✓ 운영 설정 실측 검증: {len(OBSERVED_TITLES)}건 중 "
+          f"{kept}건 채택 / {len(OBSERVED_TITLES) - kept}건 배제 — 전부 일치")
+
+
+def test_dedupe_key_separates_same_url_postings():
+    """회귀: 상세링크가 없는 게시판 글이 전부 한 건으로 뭉개졌다(실측 83→13)."""
+    board = "http://www.gamli.or.kr/base/work/work_01.php"
+    posts = [
+        Posting("gamli", "감리협회", "협회", "정보통신감리원 모집공고", board),
+        Posting("gamli", "감리협회", "협회", "중급 통신 감리원 상주 모십니다", board),
+        Posting("gamli", "감리협회", "협회", "정보통신감리원 모집공고", board),  # 진짜 중복
+    ]
+    assert len({p.key for p in posts}) == 2
+    assert len(dedupe(posts)) == 2
+    print("  ✓ 중복키 회귀: 같은 URL의 다른 글을 제목으로 구분")
+
+
 if __name__ == "__main__":
     http.get = lambda *a, **k: FakeResponse()          # 네트워크 차단 환경용 스텁
     import src.collectors.generic_board as gb
@@ -270,4 +343,6 @@ if __name__ == "__main__":
     test_on_target_postings_are_kept()
     test_portal_padding_results_are_rejected()
     test_navigation_links_are_not_postings(None)
+    test_real_config_against_observed_titles()
+    test_dedupe_key_separates_same_url_postings()
     print("\n전체 통과 ✅")

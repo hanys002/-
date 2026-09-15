@@ -28,6 +28,7 @@ POST_ID_HINT = re.compile(r"\d")
 # 워드프레스식 게시글은 번호 대신 긴 슬러그를 쓴다(한글은 URL 인코딩돼 더 길어진다).
 # 메뉴 링크('/kpis', '/intro/greeting')는 짧아 이 길이를 넘지 않는다.
 SLUG_MIN_LEN = 25
+ROW_TEXT_LIMIT = 300
 
 
 def _looks_like_post(href: str) -> bool:
@@ -50,7 +51,13 @@ def _make_posting(cfg, anchor, row, matcher: KeywordMatcher) -> Posting | None:
     if len(title) < MIN_TITLE_LEN:
         return None
 
-    row_text = row.get_text(" ", strip=True) if row is not None else title
+    # 게시판 목록은 카테고리 메뉴·뉴스도 함께 걸리므로 채용 신호어를 요구한다.
+    if not matcher.has_hiring_signal(title):
+        return None
+
+    # 폴백 경로에서는 부모가 메뉴 블록 전체일 수 있어 길이를 제한한다.
+    # (제한하지 않으면 메뉴 전체 텍스트가 분야 키워드를 만족시켜 버린다)
+    row_text = row.get_text(" ", strip=True)[:ROW_TEXT_LIMIT] if row is not None else title
     matched = matcher.match(title, row_text)
     if not matched:
         return None

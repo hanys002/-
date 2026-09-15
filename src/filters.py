@@ -72,6 +72,19 @@ class KeywordMatcher:
         self.domain = cfg.get("domain", [])
         self.other_fields = cfg.get("other_fields", [])
         self.exclude = cfg.get("exclude", [])
+        self.hiring_signals = cfg.get("hiring_signals", [])
+
+    def has_hiring_signal(self, title: str) -> bool:
+        """제목에 채용 의사 표현이 있는지. 게시판 목록 전용 판정.
+
+        협회 사이트를 통째로 훑으면 카테고리 메뉴('전기·전자·정보기술')와
+        뉴스 기사('정보공학기술사회 정기총회 개최')가 함께 걸린다. 이들은
+        키워드는 맞지만 채용 신호어가 없다는 점에서 공고와 구별된다.
+        """
+        if not self.hiring_signals:
+            return True
+        blob = normalize(title)
+        return any(normalize(sig) in blob for sig in self.hiring_signals)
 
     def is_excluded(self, *texts: str) -> bool:
         """채용이 아닌 글인지만 판정한다.
