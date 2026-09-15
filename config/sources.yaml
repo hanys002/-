@@ -97,42 +97,41 @@ sources:
       posted: 6
 
   - id: itpe
-    name: 한국정보통신기술사회 채용/구인
+    name: 한국정보통신기술사회 열린공간
     org: 한국정보통신기술사회(ITPE)
     type: html_board
-    # www.itpe.or.kr/ 는 67바이트 리다이렉트 스텁이라 내용이 없다(진단으로 확인).
-    # 실제 사이트는 /main/ko/ 아래에 있다. 구인 게시판 경로는 진단으로 찾는다.
-    # 구인 게시판은 회원 전용이고, 주소를 추정으로 맞힐 수 없다.
-    #   sub04_02.html → 실재하나 "회원님은 접근 권한이 없습니다"
-    #   sub07_01~03.html → 전부 404 (메뉴번호와 파일번호가 1:1이 아니다)
-    # 그래서 메인 페이지에서 로그인한 뒤 열린공간 메뉴를 실제로 클릭한다.
-    # 이동한 주소는 로그의 '최종 위치'에 찍히므로 그걸 보고 확정하면 된다.
-    url: https://itpe.or.kr/main/ko/index.html
-    base: https://itpe.or.kr/main/ko/
-    render: true
-    eval_js: "menu('sub7_1')"
+    # menu('sub7_1')이 데려간 bbs_sb0701은 '자유게시판'이었다. 실측 게시물이
+    # 서적 소개·전시회 안내·출마의 변이었고 구인글이 하나도 없었다.
+    # 구인게시판은 '정회원 코너' 안에 따로 있다(내비 실측).
+    #   ul.sgnb_sb4 > li  - 행사공지/참가신청  menu('sub4_1')
+    #                     - 회원검색          menu('sub4_2')
+    #                     - 구인게시판        menu('sub4_4')  ← 이것
+    # 게시판 코드를 또 추측하지 않는다. 로그인한 브라우저가 메뉴를 눌러
+    # 실제로 도착한 곳을 쓴다.
+    # 주소는 로그인한 브라우저가 menu('sub4_4')로 실제 도착한 곳이다.
+    #   최종 위치  …/index.php?code=bbs_sb0404&xid=4
+    #   실측       bbsView.php 링크 20개, '정보통신기술사' 15회
+    #              (자유게시판 sb0701은 4회뿐이었다 — 전부 머리글이었다)
+    url: https://itpe.or.kr/modules/bbs/index.php?code=bbs_sb0404&xid=4
+    base: https://itpe.or.kr/modules/bbs/
     enabled: true
-    # 로그인 폼 필드명은 브라우저 렌더링 진단으로 확인한 실제 값이다.
-    # (추정값 userId/userPw는 틀렸다)
+    render: true
+    # 목록은 표가 아니라 bbsView.php 링크 묶음이다(자유게시판 실측).
+    wait_for: "a[href*='bbsView.php']"
+    row_selector: "a[href*='bbsView.php']"
+    title_selector: "a"
+    date_selector: "td"
+    link_attr: href
     login:
-      url: https://itpe.or.kr/modules/member/memberProcess.php
-      # form_url이 있으면 브라우저가 이 페이지에서 폼을 채워 로그인한다.
-      # 로그인 폼은 메인 페이지가 아니라 회원 페이지에 있다(실측: 메인에서
-      # 시도하면 no-field). menu('sub7_1')이 이동하는 주소가 바로 여기다.
+      # 브라우저가 이 페이지에서 폼을 채워 로그인한다.
+      # 로그인 폼은 메인이 아니라 회원 페이지에 있다(실측: 메인은 no-field).
       form_url: https://itpe.or.kr/modules/member/index.php?lang_type=ko
+      url: https://itpe.or.kr/modules/member/memberProcess.php
       id_field: userID
       pw_field: password
       id_env: ITPE_ID
       pw_env: ITPE_PW
-      extra:
-        memberMode: login
-        goURL: /main/ko/
-        idMemory: N
       success_marker: 로그아웃
-    row_selector: "table tbody tr, ul li"
-    title_selector: "a"
-    date_selector: "td, span, em"
-    link_attr: href
 
   - id: pesk
     name: 대한기술사회 구인구직
@@ -158,6 +157,10 @@ sources:
     url: https://www.kica.or.kr/job/hireIndex
     base: https://www.kica.or.kr
     enabled: true
+    # 정적 요청은 140KB를 받아오지만 전부 사이트 껍데기였다(자격 0회,
+    # 380행이 모두 내비게이션). 목록을 스크립트가 채우는 것으로 보고 렌더링한다.
+    render: true
+    wait_for: "table tbody tr, div.list_item"
     row_selector: "table tbody tr, ul li, div.list_item"
     title_selector: "a"
     date_selector: "td, span, .date"
@@ -213,7 +216,12 @@ sources:
     name: 한국정보공학기술사회 구인
     org: 한국정보공학기술사회(KAPIE)
     type: html_board
-    url: https://kapie.or.kr/
+    # 홈페이지를 긁고 있었다. 실측에서 자격 0회에 78행이 전부 메뉴였다.
+    # 구인구직 게시판은 '회원공간' 아래 따로 있다(내비에서 확보한 주소).
+    # 다만 이 게시판은 회원 전용이다 — 비로그인으로 열면 <title>이
+    # '로그인 - (사)한국정보공학기술사회'로 내려온다(실측). 계정을 넣기
+    # 전까지는 0건이 정상이다. 넣으려면 아래 login 블록을 살리면 된다.
+    url: https://kapie.or.kr/%ea%b5%ac%ec%9d%b8%ea%b5%ac%ec%a7%81/
     base: https://kapie.or.kr/
     enabled: true
     row_selector: "article, .post, ul li"
@@ -316,9 +324,13 @@ sources:
     name: 한국플랜트산업협회
     org: 한국플랜트산업협회(KOPIA)
     type: html_board
+    # 이 주소는 '전문인력양성' 사업 소개 페이지지 게시판이 아니다.
+    # 실측: 21KB, 자격 0회, 80행이 전부 메뉴. 채용글이 있을 자리가 없다.
+    # 추측으로 다른 주소를 넣지 않고 끈다. 플랜트·계장 분야 공고는
+    # WORK24 오픈API(work24 소스)로 받는 것이 정공법이다.
     url: https://www.kopia.or.kr/business/professional.php
     base: https://www.kopia.or.kr/business/
-    enabled: true
+    enabled: false
     row_selector: "table tbody tr, table tr, ul li"
     title_selector: "a"
     date_selector: "td, span, .date"

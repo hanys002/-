@@ -477,6 +477,99 @@ def test_diagnose_runs_without_crashing():
     print("  ✓ 진단 도구: 로그인 폼·공백 표기 탐지 정상 (예외 없음)")
 
 
+def test_diagnose_finds_list_container():
+    """정보통신기술사회 열린공간은 표가 아니라 ul/li로 그려진다.
+
+    table 선택자로는 검색 폼(tr 6개)만 잡히고 목록 67행을 통째로 놓쳤다.
+    진단이 '반복 구조를 가진 부모'를 스스로 찾아 선택자를 제시해야 한다.
+    """
+    from bs4 import BeautifulSoup
+    from src import diagnose
+
+    html = """<html><body>
+      <div id="header"><a href="javascript:menu('sub7_1');">열린공간</a></div>
+      <table><tr><td><input name="keyword"></td></tr></table>
+      <ul class="bbs_list">
+        <li><a href="index.php?code=bbs_sb0701&mode=view&uid=901">정보통신기술사 모십니다</a><span>2026-09-10</span></li>
+        <li><a href="index.php?code=bbs_sb0701&mode=view&uid=900">전자응용기술사 구합니다</a><span>2026-09-08</span></li>
+        <li><a href="index.php?code=bbs_sb0701&mode=view&uid=899">감리원 모집</a><span>2026-09-07</span></li>
+        <li><a href="index.php?code=bbs_sb0701&mode=view&uid=898">기술사 채용</a><span>2026-09-01</span></li>
+      </ul>
+    </body></html>"""
+    soup = BeautifulSoup(html, "html.parser")
+
+    cands = diagnose._list_candidates(soup)
+    assert cands, "반복 구조를 찾지 못했다"
+    sel, rows, samples = cands[0]
+    assert rows == 4, rows
+    assert sel.endswith("> li"), sel
+    assert "bbs_list" in sel, sel
+    # 제시한 선택자는 그대로 설정에 붙여넣어 동작해야 한다
+    assert len(soup.select(sel)) == 4, sel
+
+    # 내비게이션(javascript:)은 빼고 실제 주소만 남아야 한다
+    links = diagnose._content_links(soup)
+    assert all("javascript:" not in h for _, h in links), links
+    assert len(links) == 4, links
+    print("  ✓ 진단 도구: ul/li 목록 자동 탐지 + 내비 링크 배제")
+
+
+# 정보통신기술사회 구인게시판의 실제 구조(--diagnose itpe로 확인).
+# 표가 아니라 bbsView.php 링크가 늘어서 있고, 날짜는 링크 바깥 칸에 있다.
+ITPE_HTML = """<html><body>
+  <div class="main_header"><ul class="sgnb_sb4">
+    <li><a href="javascript:menu('sub4_4');">- 구인게시판</a></li>
+  </ul></div>
+  <div class="bbs">
+    <div class="row"><a href="bbsView.php?id=42&code=bbs_sb0404&xid=2">정보통신기술사 모십니다 (서울 본사)</a><span>2026-09-10</span></div>
+    <div class="row"><a href="bbsView.php?id=41&code=bbs_sb0404&xid=2">전자응용기술사 채용 공고</a><span>2026-09-02</span></div>
+    <div class="row"><a href="bbsView.php?id=40&code=bbs_sb0404&xid=2">감리원 모집합니다</a><span>2026-08-30</span></div>
+    <div class="row"><a href="bbsView.php?id=39&code=bbs_sb0404&xid=2">정보통신기술사 자격증대여 구합니다</a><span>2026-08-21</span></div>
+  </div>
+</body></html>"""
+
+
+def test_board_rows_can_be_anchors_themselves():
+    """회귀: 행 선택자가 <a>를 직접 가리키면 제목을 통째로 놓쳤다.
+
+    row.select("a")는 자손만 훑으므로 행 자신인 <a>는 걸리지 않는다.
+    정보통신기술사회 구인게시판이 이 구조여서 0건이었다.
+    """
+    import src.collectors.generic_board as gb
+
+    cfg = {
+        "id": "itpe", "name": "ITPE", "org": "ITPE",
+        "url": "https://itpe.or.kr/modules/bbs/index.php",
+        "base": "https://itpe.or.kr/modules/bbs/",
+        "row_selector": "a[href*='bbsView.php']",
+        "title_selector": "a",
+        "date_selector": "span",
+        "link_attr": "href",
+    }
+    orig_fetch, orig_login = gb.fetch.page_html, gb.http.login
+    gb.fetch.page_html = lambda *a, **k: ITPE_HTML
+    gb.http.login = lambda *a, **k: None
+    try:
+        posts, scanned = gb.collect(cfg, SETTINGS, KeywordMatcher(KEYWORDS))
+    finally:
+        gb.fetch.page_html, gb.http.login = orig_fetch, orig_login
+
+    titles = [p.title for p in posts]
+    assert len(posts) == 2, titles
+    assert "정보통신기술사 모십니다 (서울 본사)" in titles
+    assert "전자응용기술사 채용 공고" in titles
+    assert not any("감리원" in t for t in titles), titles          # 자격 불일치
+    assert not any("자격증대여" in t for t in titles), titles      # 배제어
+
+    # 상세 링크가 목록 URL로 뭉개지지 않아야 한다
+    first = [p for p in posts if p.title.startswith("정보통신기술사")][0]
+    assert first.url == "https://itpe.or.kr/modules/bbs/bbsView.php?id=42&code=bbs_sb0404&xid=2", first.url
+    assert not first.link_is_list
+    # 날짜는 링크 바깥 형제 칸에 있다 — 한 단계 올려 잡아야 읽힌다
+    assert first.posted_on is not None and first.posted_on.year == 2026, first.posted_on
+    print("  ✓ 링크가 곧 행인 게시판: 제목·상세링크·날짜 모두 수집")
+
+
 # 한국기술사회 구인게시판의 실제 구조(--diagnose kpea로 확인).
 # 제목 컬럼이 없고 셀에 정보가 나뉘어 있어, 앵커 텍스트를 제목으로 읽는
 # 방식으로는 통째로 놓친다. 실측에서 HTML에 '정보통신기술사'가 있는데도
@@ -591,6 +684,8 @@ if __name__ == "__main__":
     test_recency_window_is_one_year()
     test_login_credentials_are_never_in_config()
     test_diagnose_runs_without_crashing()
+    test_diagnose_finds_list_container()
+    test_board_rows_can_be_anchors_themselves()
     test_portal_queries_cover_all_qualifications()
     test_navigation_and_news_are_not_postings()
     test_unusable_links_fall_back_to_board_url()
