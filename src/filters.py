@@ -60,6 +60,15 @@ class KeywordMatcher:
         self.context = cfg.get("context", [])
         self.exclude = cfg.get("exclude", [])
 
+    def is_excluded(self, *texts: str) -> bool:
+        """채용이 아닌 글(학원 수강생 모집 등)인지만 판정한다.
+
+        포털 검색 결과처럼 이미 키워드로 걸러진 목록에 쓴다. 포털은 자격요건
+        본문까지 검색하므로 제목만 다시 검사하면 정당한 공고를 대부분 버린다.
+        """
+        blob = normalize(" ".join(t for t in texts if t))
+        return any(normalize(bad) in blob for bad in self.exclude)
+
     def match(self, *texts: str) -> list[str]:
         """적합하면 매칭된 키워드 목록, 아니면 빈 리스트."""
         blob = normalize(" ".join(t for t in texts if t))

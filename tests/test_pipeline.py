@@ -146,6 +146,23 @@ def test_gamriwon_titles_are_matched():
     print("  ✓ 감리원 키워드: 정보통신 맥락만 선별 채택")
 
 
+def test_portal_policy_is_exclude_only():
+    """회귀: 포털 검색 결과에 제목 매칭을 다시 걸면 정당한 공고가 전부 날아간다.
+
+    run #2 실측 — 잡코리아 119건 스캔 / 0건 채택, 사람인 61건 / 0건.
+    포털은 자격요건 본문까지 검색하므로 '검색 자체를 필터로 신뢰'하고
+    학원 광고 등 제외 대상만 걸러야 한다.
+    """
+    m = KeywordMatcher(KEYWORDS)
+    # 포털이 '정보통신기술사'로 찾아준 공고지만 제목엔 그 단어가 없다
+    real = "통신설비 시공관리 경력직 모집"
+    assert not m.match(real)            # 제목 매칭으로는 탈락 — 과거 버그의 원인
+    assert not m.is_excluded(real)      # 제외 정책으로는 통과해야 정상
+    # 학원 광고는 포털 결과여도 걸러야 한다
+    assert m.is_excluded("정보통신기술사 대비반 수강생 모집", "OO학원")
+    print("  ✓ 포털 필터 정책: 검색 신뢰 + 제외 대상만 차단")
+
+
 if __name__ == "__main__":
     http.get = lambda *a, **k: FakeResponse()          # 네트워크 차단 환경용 스텁
     import src.collectors.generic_board as gb
@@ -160,4 +177,5 @@ if __name__ == "__main__":
     test_search_query_does_not_bypass_filter()
     test_fallback_runs_when_rows_matched_but_nothing_adopted(None)
     test_gamriwon_titles_are_matched()
+    test_portal_policy_is_exclude_only()
     print("\n전체 통과 ✅")

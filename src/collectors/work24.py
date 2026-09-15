@@ -41,8 +41,7 @@ def collect(cfg: dict, settings: dict, matcher: KeywordMatcher) -> tuple[list[Po
             scanned += 1
             title = item.get("recrutPbancTtl", "")
             company = item.get("instNm", "")
-            matched = matcher.match(title, company, item.get("ncsCdNmLst", ""))
-            if not matched:
+            if matcher.is_excluded(title, company):
                 continue
             out.append(Posting(
                 source_id=cfg["id"], source_name=cfg["name"], org=cfg.get("org", "고용24"),
@@ -51,6 +50,6 @@ def collect(cfg: dict, settings: dict, matcher: KeywordMatcher) -> tuple[list[Po
                 posted_on=parse_iso(item.get("pbancBgngYmd", "")),
                 deadline=str(parse_iso(item.get("pbancEndYmd", "")) or ""),
                 location=item.get("workRgnNmLst", ""),
-                matched=matched,
+                matched=[query],
             ))
     return out, scanned

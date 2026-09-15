@@ -130,6 +130,7 @@ sources:
     org: 사람인
     type: saramin
     enabled: true
+    max_items: 20   # 포털은 검색 자체가 필터라 건수가 많다 — 최신순 상위만
     # SARAMIN_API_KEY 시크릿이 있으면 공식 오픈 API, 없으면 공개 검색 HTML 폴백
     api_url: https://oapi.saramin.co.kr/job-search
     search_url: https://www.saramin.co.kr/zf_user/search/recruit
@@ -143,6 +144,7 @@ sources:
     org: 잡코리아
     type: jobkorea
     enabled: true
+    max_items: 20   # 포털은 검색 자체가 필터라 건수가 많다 — 최신순 상위만
     search_url: https://www.jobkorea.co.kr/Search/
     queries:
       - 정보통신기술사
@@ -154,6 +156,7 @@ sources:
     org: 고용노동부 고용24
     type: work24
     enabled: true
+    max_items: 20   # 포털은 검색 자체가 필터라 건수가 많다 — 최신순 상위만
     # WORK24_API_KEY(공공데이터포털 인증키)가 있을 때만 동작
     api_url: https://apis.data.go.kr/1051000/recruitment/list
     queries:
