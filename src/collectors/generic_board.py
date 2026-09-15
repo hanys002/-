@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup
@@ -19,6 +20,11 @@ log = logging.getLogger(__name__)
 # 링크 텍스트가 이보다 짧으면 제목이 아니라 페이징/아이콘으로 본다.
 MIN_TITLE_LEN = 6
 SKIP_LINK_PREFIXES = ("javascript:void", "#")
+
+# 게시글 링크는 글 번호를 갖는다(?id=123, /view/456 등). 반면 사이트 메뉴는
+# '/kpis' 처럼 번호가 없다. 폴백으로 문서 전체를 훑을 때 메뉴가 공고로 잡히는
+# 것을 막는다(실측: 한국기술사회 '기술사종합정보시스템' 메뉴가 채택됨).
+POST_ID_HINT = re.compile(r"\d")
 
 
 def _row_date(row, date_selector: str):
@@ -83,7 +89,10 @@ def collect(cfg: dict, settings: dict, matcher: KeywordMatcher) -> tuple[list[Po
         log.warning("[%s] 채택 0건(행 %d개) — 전체 링크 폴백", cfg["id"], len(rows))
         seen_anchors = set()
         for anchor in soup.find_all("a"):
-            ident = (anchor.get("href", ""), anchor.get_text(" ", strip=True))
+            href = anchor.get("href", "")
+            if not POST_ID_HINT.search(href):
+                continue          # 글 번호 없는 링크 = 메뉴/네비게이션
+            ident = (href, anchor.get_text(" ", strip=True))
             if ident in seen_anchors:
                 continue
             seen_anchors.add(ident)

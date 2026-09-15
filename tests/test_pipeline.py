@@ -174,13 +174,13 @@ def test_portal_policy_is_exclude_only():
     학원 광고 등 제외 대상만 걸러야 한다.
     """
     m = KeywordMatcher(KEYWORDS)
-    # 포털이 '정보통신기술사'로 찾아준 공고지만 제목엔 그 단어가 없다
-    real = "통신설비 시공관리 경력직 모집"
-    assert not m.match(real)            # 제목 매칭으로는 탈락 — 과거 버그의 원인
-    assert not m.is_excluded(real)      # 제외 정책으로는 통과해야 정상
-    # 학원 광고는 포털 결과여도 걸러야 한다
-    assert m.is_excluded("정보통신기술사 대비반 수강생 모집", "OO학원")
-    print("  ✓ 포털 필터 정책: 검색 신뢰 + 제외 대상만 차단")
+    # 카드 본문(직무·기술 태그)까지 넘기면 제목에 없는 건도 살아난다
+    assert not m.match("통신설비 시공관리 경력직 모집")          # 제목만으로는 탈락
+    assert m.match("통신설비 시공관리 경력직 모집",
+                   "정보통신기술사 우대 · 통신설비 · 감리")       # 본문 포함 시 채택
+    # 학원 광고는 본문에 자격증명이 있어도 걸러야 한다
+    assert not m.match("정보통신기술사 대비반 수강생 모집", "OO학원")
+    print("  ✓ 포털 필터 정책: 카드 본문까지 매칭 + 광고 차단")
 
 
 def test_off_target_technical_grades_are_rejected():
@@ -201,6 +201,56 @@ def test_on_target_postings_are_kept():
     print("  ✓ 보유 자격 공고 채택:", len(ON_TARGET), "유형 전부 통과")
 
 
+def test_portal_padding_results_are_rejected():
+    """사용자 제보 회귀: 발송 메일에 무관 공고 18건이 들어갔다.
+
+    사람인은 '정보통신기술사' 검색 일치 건이 적으면 무관한 공고로 결과를 채운다.
+    '포털 검색을 필터로 신뢰한다'는 전제가 틀렸음이 실측으로 확인됐다.
+    아래는 실제로 메일에 실렸던 제목들 — 전부 탈락해야 한다.
+    """
+    m = KeywordMatcher(KEYWORDS)
+    padded = [
+        "무등휴요양병원 영양실장 모집합니다.",
+        "상무초밥 본사 상무프랜차이즈에서 경상&충청도 지부장 모집",
+        "성균관대학교 교직원(정규직) 경력채용 공고",
+        "Flutter 프론트엔드 개발자 채용",
+        "백엔드 시니어 개발자 채용",
+        "자동차 부품 제조업 생산(공정현장관리)/생산관리 인재 채용",
+        "(주)에스제이코비스 물류 영업 지원업무 본사 직원 채용",
+        "[사업기획부] 공공제안서/발표자료 작성 및 PPT디자인 업무 담당",
+    ]
+    for title in padded:
+        assert not m.match(title), f"오탐 통과: {title}"
+    print("  ✓ 포털 패딩 결과 배제:", len(padded), "건 전부 탈락")
+
+
+def test_navigation_links_are_not_postings(monkeypatch_get):
+    """사용자 제보 회귀: '기술사종합정보시스템'(사이트 메뉴)이 공고로 실렸다."""
+    nav_html = """
+    <html><body>
+      <ul>
+        <li><a href="/kpis">기술사종합정보시스템</a></li>
+        <li><a href="/intro/greeting">정보통신 기술사회 소개</a></li>
+        <li><a href="/board/view.do?id=771">정보통신기술사 감리원 모집</a></li>
+      </ul>
+    </body></html>"""
+
+    class NavResponse:
+        text = nav_html
+
+    import src.collectors.generic_board as gb
+    original, gb.http.get = gb.http.get, lambda *a, **k: NavResponse()
+    try:
+        cfg = dict(CFG, row_selector="table tbody tr")   # 미적중 → 폴백 경로
+        posts, _ = board_collect(cfg, SETTINGS, KeywordMatcher(KEYWORDS))
+    finally:
+        gb.http.get = original
+
+    titles = [p.title for p in posts]
+    assert titles == ["정보통신기술사 감리원 모집"], titles
+    print("  ✓ 네비게이션 링크 배제: 글 번호 있는 게시글만 채택")
+
+
 if __name__ == "__main__":
     http.get = lambda *a, **k: FakeResponse()          # 네트워크 차단 환경용 스텁
     import src.collectors.generic_board as gb
@@ -218,4 +268,6 @@ if __name__ == "__main__":
     test_portal_policy_is_exclude_only()
     test_off_target_technical_grades_are_rejected()
     test_on_target_postings_are_kept()
+    test_portal_padding_results_are_rejected()
+    test_navigation_links_are_not_postings(None)
     print("\n전체 통과 ✅")

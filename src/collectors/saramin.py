@@ -18,6 +18,9 @@ from ..models import Posting
 log = logging.getLogger(__name__)
 BASE = "https://www.saramin.co.kr"
 MIN_TITLE_LEN = 6
+# 카드 본문에는 직무·기술 태그가 함께 있어 제목만으로는 놓치는 건을 잡아준다.
+# 다만 부모 요소가 클 수 있어 상한을 둔다.
+ROW_TEXT_LIMIT = 400
 
 
 def _from_api(cfg, settings, matcher, key) -> tuple[list[Posting], int]:
@@ -62,7 +65,9 @@ def _from_html(cfg, settings, matcher) -> tuple[list[Posting], int]:
     """공개 검색 결과 파싱.
 
     클래스 선택자는 개편에 취약해 상세공고 링크 패턴(rec_idx)으로 직접 수집한다.
-    검색 자체가 키워드 필터이므로 여기서는 제외 대상만 걸러낸다.
+    사람인은 검색어 일치 건이 적으면 무관한 공고로 결과를 채운다(실측: '정보통신기술사'
+    검색에 요양병원 영양실장·프랜차이즈 지부장이 섞여 나옴). 따라서 검색을 필터로
+    신뢰할 수 없고, 카드 본문까지 포함해 전체 키워드 매칭을 다시 적용한다.
     """
     out, scanned, seen = [], 0, set()
     limit = cfg.get("max_items", settings.get("max_items_per_source", 60))
@@ -86,8 +91,9 @@ def _from_html(cfg, settings, matcher) -> tuple[list[Posting], int]:
             seen.add(rec_id)
             scanned += 1
             row = anchor.find_parent(["tr", "li", "article", "div"]) or anchor
-            row_text = row.get_text(" ", strip=True)
-            if matcher.is_excluded(title, row_text):
+            row_text = row.get_text(" ", strip=True)[:ROW_TEXT_LIMIT]
+            matched = matcher.match(title, row_text)
+            if not matched:
                 continue
             corp = row.select_one(".corp_name a, .company_nm a, .str_tit")
             date_el = row.select_one(".job_date, .date, .support_info")
@@ -96,7 +102,7 @@ def _from_html(cfg, settings, matcher) -> tuple[list[Posting], int]:
                 title=title, url=urljoin(BASE, anchor["href"]),
                 company=corp.get_text(" ", strip=True) if corp else "",
                 posted_on=parse_date(date_el.get_text(" ", strip=True)) if date_el else None,
-                matched=[query],
+                matched=matched,
             ))
     return out[:limit], scanned
 
