@@ -32,6 +32,69 @@ def _summarize_links(soup, limit: int = 10) -> list[tuple[str, str]]:
     return out
 
 
+# 목록이 표가 아니라 ul/li·div로 그려진 사이트가 많다. 행 선택자를 추측하지 않고,
+# '같은 태그의 형제가 여러 개 붙어 있는 부모'를 찾아 실제 후보를 뽑는다.
+def _list_candidates(soup, limit: int = 6) -> list[tuple[str, int, list[str]]]:
+    seen: dict[int, tuple[str, int, list[str]]] = {}
+    for parent in soup.find_all(["ul", "ol", "tbody", "table", "div", "section"]):
+        kids = [c for c in parent.find_all(recursive=False) if c.name in ("li", "tr", "div", "a", "dl")]
+        if len(kids) < 4:
+            continue
+        tag = max({k.name for k in kids}, key=lambda n: sum(1 for k in kids if k.name == n))
+        same = [k for k in kids if k.name == tag]
+        if len(same) < 4:
+            continue
+        # 링크를 품은 행만 게시판 목록으로 본다(내비게이션 메뉴 배제는 아래 텍스트로 판단).
+        linked = sum(1 for k in same if k.find("a", href=True))
+        if linked < 3:
+            continue
+        samples = []
+        for k in same[:4]:
+            txt = k.get_text(" ", strip=True)
+            a = k.find("a", href=True)
+            href = a["href"][:70] if a else "-"
+            samples.append(f"{txt[:80]}  ←  {href}")
+        seen[id(parent)] = (_selector_of(parent, tag), len(same), samples)
+    out = sorted(seen.values(), key=lambda x: -x[1])
+    return out[:limit]
+
+
+def _selector_of(el, child_tag: str) -> str:
+    """부모를 그대로 설정에 붙여넣을 수 있는 CSS 선택자로 적는다."""
+    bits = []
+    node = el
+    for _ in range(3):
+        if node is None or node.name in (None, "[document]", "html", "body"):
+            break
+        part = node.name
+        if node.get("id"):
+            part = f"{node.name}#{node['id']}"
+            bits.append(part)
+            break
+        classes = [c for c in (node.get("class") or []) if c]
+        if classes:
+            part = f"{node.name}.{'.'.join(classes[:2])}"
+        bits.append(part)
+        node = node.parent
+    return " ".join(reversed(bits)) + f" > {child_tag}"
+
+
+# javascript:menu(...) 내비게이션을 걷어내고 '실제 주소가 있는 링크'만 남긴다.
+def _content_links(soup, limit: int = 25) -> list[tuple[str, str]]:
+    out = []
+    for a in soup.find_all("a", href=True):
+        href = a["href"].strip()
+        if href.lower().startswith(("javascript:", "#", "mailto:", "tel:")):
+            continue
+        text = a.get_text(" ", strip=True)
+        if len(text) < 4:
+            continue
+        out.append((text[:70], href[:100]))
+        if len(out) >= limit:
+            break
+    return out
+
+
 def run(cfg: dict, settings: dict, qualifications: list[str], session=None) -> None:
     url = cfg.get("url") or cfg.get("search_url") or ""
     log.info("=" * 70)
@@ -114,5 +177,21 @@ def run(cfg: dict, settings: dict, qualifications: list[str], session=None) -> N
 
     log.info("링크 상위 %d개:", 10)
     for t, h in _summarize_links(soup):
+        log.info("    %-70s %s", t, h)
+
+    # 행 선택자를 실물에서 고르기 위한 후보 목록
+    cands = _list_candidates(soup)
+    if cands:
+        log.info("목록 후보 %d개 (행 많은 순):", len(cands))
+        for sel, n, samples in cands:
+            log.info("  · row_selector: %s   (%d행)", sel, n)
+            for smp in samples:
+                log.info("        %s", smp)
+    else:
+        log.info("목록 후보 없음 — 반복 구조를 찾지 못했다")
+
+    links = _content_links(soup)
+    log.info("주소 있는 링크 %d개(내비 제외):", len(links))
+    for t, h in links:
         log.info("    %-70s %s", t, h)
     log.info("=" * 70)

@@ -477,6 +477,43 @@ def test_diagnose_runs_without_crashing():
     print("  ✓ 진단 도구: 로그인 폼·공백 표기 탐지 정상 (예외 없음)")
 
 
+def test_diagnose_finds_list_container():
+    """정보통신기술사회 열린공간은 표가 아니라 ul/li로 그려진다.
+
+    table 선택자로는 검색 폼(tr 6개)만 잡히고 목록 67행을 통째로 놓쳤다.
+    진단이 '반복 구조를 가진 부모'를 스스로 찾아 선택자를 제시해야 한다.
+    """
+    from bs4 import BeautifulSoup
+    from src import diagnose
+
+    html = """<html><body>
+      <div id="header"><a href="javascript:menu('sub7_1');">열린공간</a></div>
+      <table><tr><td><input name="keyword"></td></tr></table>
+      <ul class="bbs_list">
+        <li><a href="index.php?code=bbs_sb0701&mode=view&uid=901">정보통신기술사 모십니다</a><span>2026-09-10</span></li>
+        <li><a href="index.php?code=bbs_sb0701&mode=view&uid=900">전자응용기술사 구합니다</a><span>2026-09-08</span></li>
+        <li><a href="index.php?code=bbs_sb0701&mode=view&uid=899">감리원 모집</a><span>2026-09-07</span></li>
+        <li><a href="index.php?code=bbs_sb0701&mode=view&uid=898">기술사 채용</a><span>2026-09-01</span></li>
+      </ul>
+    </body></html>"""
+    soup = BeautifulSoup(html, "html.parser")
+
+    cands = diagnose._list_candidates(soup)
+    assert cands, "반복 구조를 찾지 못했다"
+    sel, rows, samples = cands[0]
+    assert rows == 4, rows
+    assert sel.endswith("> li"), sel
+    assert "bbs_list" in sel, sel
+    # 제시한 선택자는 그대로 설정에 붙여넣어 동작해야 한다
+    assert len(soup.select(sel)) == 4, sel
+
+    # 내비게이션(javascript:)은 빼고 실제 주소만 남아야 한다
+    links = diagnose._content_links(soup)
+    assert all("javascript:" not in h for _, h in links), links
+    assert len(links) == 4, links
+    print("  ✓ 진단 도구: ul/li 목록 자동 탐지 + 내비 링크 배제")
+
+
 # 한국기술사회 구인게시판의 실제 구조(--diagnose kpea로 확인).
 # 제목 컬럼이 없고 셀에 정보가 나뉘어 있어, 앵커 텍스트를 제목으로 읽는
 # 방식으로는 통째로 놓친다. 실측에서 HTML에 '정보통신기술사'가 있는데도
@@ -591,6 +628,7 @@ if __name__ == "__main__":
     test_recency_window_is_one_year()
     test_login_credentials_are_never_in_config()
     test_diagnose_runs_without_crashing()
+    test_diagnose_finds_list_container()
     test_portal_queries_cover_all_qualifications()
     test_navigation_and_news_are_not_postings()
     test_unusable_links_fall_back_to_board_url()
