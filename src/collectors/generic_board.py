@@ -25,6 +25,14 @@ SKIP_LINK_PREFIXES = ("javascript:void", "#")
 # '/kpis' 처럼 번호가 없다. 폴백으로 문서 전체를 훑을 때 메뉴가 공고로 잡히는
 # 것을 막는다(실측: 한국기술사회 '기술사종합정보시스템' 메뉴가 채택됨).
 POST_ID_HINT = re.compile(r"\d")
+# 워드프레스식 게시글은 번호 대신 긴 슬러그를 쓴다(한글은 URL 인코딩돼 더 길어진다).
+# 메뉴 링크('/kpis', '/intro/greeting')는 짧아 이 길이를 넘지 않는다.
+SLUG_MIN_LEN = 25
+
+
+def _looks_like_post(href: str) -> bool:
+    """게시글 링크로 보이면 True. 사이트 메뉴를 걸러내기 위한 판별."""
+    return bool(POST_ID_HINT.search(href)) or len(href) > SLUG_MIN_LEN
 
 
 def _row_date(row, date_selector: str):
@@ -90,8 +98,8 @@ def collect(cfg: dict, settings: dict, matcher: KeywordMatcher) -> tuple[list[Po
         seen_anchors = set()
         for anchor in soup.find_all("a"):
             href = anchor.get("href", "")
-            if not POST_ID_HINT.search(href):
-                continue          # 글 번호 없는 링크 = 메뉴/네비게이션
+            if not _looks_like_post(href):
+                continue          # 글 번호도 슬러그도 없으면 메뉴/네비게이션
             ident = (href, anchor.get_text(" ", strip=True))
             if ident in seen_anchors:
                 continue

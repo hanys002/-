@@ -171,6 +171,31 @@ sources:
     date_selector: "td"
     link_attr: href
 
+  - id: gamli
+    name: 정보통신감리협회 구인
+    org: 한국정보통신감리협회
+    type: html_board
+    # 정보통신 감리원·기술사 구인이 집중되는 게시판. 범용 포털보다 적중률이 높다.
+    url: http://www.gamli.or.kr/base/work/work_01.php?topmenu=5
+    base: http://www.gamli.or.kr/base/work/
+    enabled: true
+    row_selector: "table tbody tr, table tr"
+    title_selector: "a"
+    date_selector: "td"
+    link_attr: href
+
+  - id: kapie
+    name: 한국정보공학기술사회 구인
+    org: 한국정보공학기술사회(KAPIE)
+    type: html_board
+    url: https://kapie.or.kr/
+    base: https://kapie.or.kr/
+    enabled: true
+    row_selector: "article, .post, ul li"
+    title_selector: "a"
+    date_selector: "time, .date, span"
+    link_attr: href
+
   - id: saramin
     name: 사람인
     org: 사람인
