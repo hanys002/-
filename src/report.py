@@ -88,6 +88,29 @@ def _section(title: str, note: str, postings: list[Posting], dim: bool) -> str:
 <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;">{rows}</table>"""
 
 
+
+def _source_links(sources: list[dict]) -> str:
+    """소스 바로가기 — 자동수집과 별개로 직접 확인할 수 있게 링크를 노출한다."""
+    items = [
+        (s, s.get("url") or s.get("search_url") or s.get("api_url", ""))
+        for s in sources
+        if s.get("enabled", True) and (s.get("url") or s.get("search_url"))
+    ]
+    if not items:
+        return ""
+    cells = "".join(
+        f'<a href="{_esc(link)}" style="display:inline-block;font-family:{FONT};'
+        f'font-size:12px;color:{ACCENT};text-decoration:none;border:1px solid {LINE};'
+        f'border-radius:14px;padding:5px 11px;margin:0 5px 6px 0;">'
+        f'{_esc(s.get("org") or s.get("name", ""))} &rsaquo;</a>'
+        for s, link in items
+    )
+    return f"""
+<h2 style="font-family:{FONT};font-size:14px;color:{MUTED};margin:30px 0 9px;
+           padding-top:14px;border-top:1px solid {LINE};">소스 바로가기 — 직접 확인</h2>
+<div>{cells}</div>"""
+
+
 def _diagnostics(results: list[SourceResult]) -> str:
     rows = "".join(
         f'<tr><td style="padding:4px 10px 4px 0;font-family:{FONT};font-size:12px;'
@@ -109,6 +132,7 @@ def build_html(
     new_count: int,
     recency_days: int,
     today: date,
+    sources: list[dict] | None = None,
 ) -> str:
     months = round(recency_days / 30.4)
     summary = (
@@ -147,6 +171,7 @@ def build_html(
   {empty}
   {_section(f"최근 공고 (최근 {months}개월 이내)", "게시일 최신순입니다. 제목을 클릭하면 원문으로 이동합니다.", recent, dim=False)}
   {_section("참고 — 오래된 공고", f"게시일이 {months}개월을 넘은 건입니다. 마감되었을 수 있으니 참고용으로만 보세요.", old, dim=True)}
+  {_source_links(sources or [])}
   {_diagnostics(results)}
 
   <p style="font-family:{FONT};font-size:11px;color:{MUTED};margin-top:26px;

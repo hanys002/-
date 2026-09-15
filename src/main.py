@@ -86,7 +86,8 @@ def main(argv: list[str] | None = None) -> int:
 
     recent, old = report.sort_and_split(postings, cfg.get("recency_days", 183), today)
     html_body = report.build_html(recent, old, results, new_count,
-                                  cfg.get("recency_days", 183), today)
+                                  cfg.get("recency_days", 183), today,
+                                  sources=cfg.get("sources", []))
     text_body = report.build_text(recent, old, today)
 
     OUT.mkdir(exist_ok=True)
