@@ -59,6 +59,11 @@ def _row(post: Posting, dim: bool) -> str:
         if post.deadline
         else ""
     )
+    list_hint = (
+        '<span style="color:#6b7280;font-size:11px;">↗ 게시판 목록에서 제목으로 찾기</span>'
+        if post.link_is_list
+        else ""
+    )
     return f"""
 <tr>
   <td style="padding:11px 0;border-bottom:1px solid {LINE};font-family:{FONT};">
@@ -67,7 +72,7 @@ def _row(post: Posting, dim: bool) -> str:
       {badge}<a href="{_esc(post.url)}" style="color:{link_color};text-decoration:none;font-weight:600;">{_esc(post.title)}</a>
     </div>
     <div style="font-size:12px;color:{color};">{meta}</div>
-    <div style="margin-top:5px;">{tags}{deadline}</div>
+    <div style="margin-top:5px;">{tags}{deadline}{list_hint}</div>
   </td>
 </tr>"""
 
@@ -197,8 +202,9 @@ def build_text(
         lines.append(label)
         for post in group:
             mark = "NEW " if post.is_new else ""
+            hint = " ← 목록에서 제목으로 찾기" if post.link_is_list else ""
             lines.append(f"  {post.date_text} {mark}{post.title} ({post.org})")
-            lines.append(f"    {post.url}")
+            lines.append(f"    {post.url}{hint}")
         lines.append("")
     if results:
         lines.append("[수집 소스 상태]")

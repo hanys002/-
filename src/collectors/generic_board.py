@@ -19,7 +19,9 @@ log = logging.getLogger(__name__)
 
 # 링크 텍스트가 이보다 짧으면 제목이 아니라 페이징/아이콘으로 본다.
 MIN_TITLE_LEN = 6
-SKIP_LINK_PREFIXES = ("javascript:void", "#")
+# javascript: 스킴은 전부 사용 불가. 감리협회는 비회원 상세 열람을 막아
+# href가 javascript:alert("게시판 읽기 권한이 없습니다.")로 나온다.
+SKIP_LINK_PREFIXES = ("javascript:", "#", "mailto:", "tel:")
 
 # 게시글 링크는 글 번호를 갖는다(?id=123, /view/456 등). 반면 사이트 메뉴는
 # '/kpis' 처럼 번호가 없다. 폴백으로 문서 전체를 훑을 때 메뉴가 공고로 잡히는
@@ -64,7 +66,7 @@ def _make_posting(cfg, anchor, row, matcher: KeywordMatcher) -> Posting | None:
 
     href = anchor.get(cfg.get("link_attr", "href"), "") or ""
     if href.startswith(SKIP_LINK_PREFIXES):
-        # onclick 기반 게시판: 상세 링크를 못 만들면 목록 URL로 보낸다.
+        # onclick 기반이거나 비회원 열람이 막힌 게시판. 상세 링크를 만들 수 없다.
         href = ""
     url = urljoin(cfg.get("base") or cfg["url"], href) if href else cfg["url"]
 
@@ -76,6 +78,7 @@ def _make_posting(cfg, anchor, row, matcher: KeywordMatcher) -> Posting | None:
         url=url,
         posted_on=_row_date(row, cfg.get("date_selector", "")) if row is not None else None,
         matched=matched,
+        link_is_list=not href,     # 목록 URL로 대체됐음을 메일에 표시
     )
 
 

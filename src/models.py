@@ -23,6 +23,9 @@ class Posting:
     deadline: str = ""
     matched: list[str] = field(default_factory=list)
     is_new: bool = False
+    # 상세 링크를 만들 수 없어 게시판 목록 URL로 대체된 경우 True.
+    # 클릭하면 목록으로 가므로 메일에서 그 사실을 알려야 한다.
+    link_is_list: bool = False
 
     @property
     def key(self) -> str:

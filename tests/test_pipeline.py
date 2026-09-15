@@ -18,10 +18,11 @@ TODAY = date(2026, 9, 15)
 
 KEYWORDS = {
     "primary": ["정보통신기술사", "산업계측제어기술사", "전자응용기술사"],
-    "role": ["기술사", "수석감리원", "특급감리원", "감리원"],
-    "domain": ["정보통신", "통신설비", "계측제어", "자동제어", "계장", "전자응용"],
+    "role": ["기술사", "수석감리원", "특급감리원", "감리원", "기술자", "특급", "중급"],
+    "domain": ["정보통신", "통신", "통신설비", "계측제어", "자동제어", "계장", "전자응용"],
     "other_fields": ["건축기술사", "토목기술사", "전기기술사", "소방기술사"],
-    "exclude": ["수강생", "개강", "기출문제"],
+    "hiring_signals": ["모집", "채용", "구인", "모십", "충원", "선임자"],
+    "exclude": ["수강생", "개강", "기출문제", "구인완료", "모집완료"],
 }
 
 # 사용자 제보: 받은 메일에 보유 자격과 무관한 '기술사' 공고가 섞여 있었다.
@@ -53,7 +54,7 @@ BOARD_HTML = """
       <td>OO학원</td><td>2026-09-14</td></tr>
   <tr><td>4</td><td><a href="/view.do?id=104">건축 시공 현장소장 구함</a></td>
       <td>무관건설</td><td>2026-09-13</td></tr>
-  <tr><td>5</td><td><a href="/view.do?id=105">전자응용기술사 우대 - 반도체 계측장비 개발</a></td>
+  <tr><td>5</td><td><a href="/view.do?id=105">전자응용기술사 우대 - 반도체 계측장비 개발자 채용</a></td>
       <td>한빛세미콘</td><td>2025-12-20</td></tr>
 </tbody></table></body></html>
 """
@@ -324,6 +325,56 @@ def test_dedupe_key_separates_same_url_postings():
     print("  ✓ 중복키 회귀: 같은 URL의 다른 글을 제목으로 구분")
 
 
+def test_unusable_links_fall_back_to_board_url(monkeypatch_get):
+    """회귀: 클릭해도 아무 데도 가지 않는 링크가 메일에 실렸다.
+
+    감리협회는 비회원 상세 열람을 막아 href가
+    javascript:alert("게시판 읽기 권한이 없습니다.")로 나온다.
+    'javascript:void'만 걸러서 이게 그대로 통과했다.
+    """
+    html = """
+    <html><body><table><tbody>
+      <tr><td><a href='javascript:alert("게시판 읽기 권한이 없습니다.")'>정보통신 기술사 모십니다 (인천지역)</a></td><td>2026-06-16</td></tr>
+      <tr><td><a href="javascript:void(0)">정보통신감리원 모집공고</a></td><td>2026-07-23</td></tr>
+      <tr><td><a href="/board/view.do?id=88">통신 책임 상주감리원 모집합니다</a></td><td>2026-06-18</td></tr>
+    </tbody></table></body></html>"""
+
+    class Resp:
+        text = html
+
+    import src.collectors.generic_board as gb
+    original, gb.http.get = gb.http.get, lambda *a, **k: Resp()
+    try:
+        posts, _ = board_collect(CFG, SETTINGS, KeywordMatcher(KEYWORDS))
+    finally:
+        gb.http.get = original
+
+    assert len(posts) == 3, [p.title for p in posts]
+    for post in posts:
+        assert not post.url.startswith("javascript:"), post.url
+    # 상세 링크를 못 만든 건은 목록 URL + 안내 플래그
+    fallbacks = [p for p in posts if p.link_is_list]
+    assert len(fallbacks) == 2
+    assert all(p.url == CFG["url"] for p in fallbacks)
+    # 정상 링크는 그대로
+    normal = [p for p in posts if not p.link_is_list][0]
+    assert normal.url == "https://example.or.kr/board/view.do?id=88"
+    print("  ✓ 사용불가 링크 회귀: javascript 링크 2건을 목록 URL로 대체")
+
+
+def test_closed_postings_are_excluded():
+    """마감 표현이 다양하다 — '모집하였습니다'도 끝난 공고다."""
+    import yaml
+    cfg = yaml.safe_load(
+        (Path(__file__).resolve().parent.parent / "config" / "sources.yaml")
+        .read_text(encoding="utf-8")
+    )
+    m = KeywordMatcher(cfg["keywords"])
+    closed = "비상주 통신감리분(중급이상) 모십니다(충청,대전) - 모집하였습니다"
+    assert not m.match(closed), closed
+    print("  ✓ 마감 공고 배제: '모집하였습니다' 표현 차단")
+
+
 if __name__ == "__main__":
     http.get = lambda *a, **k: FakeResponse()          # 네트워크 차단 환경용 스텁
     import src.collectors.generic_board as gb
@@ -345,4 +396,6 @@ if __name__ == "__main__":
     test_navigation_links_are_not_postings(None)
     test_real_config_against_observed_titles()
     test_dedupe_key_separates_same_url_postings()
+    test_unusable_links_fall_back_to_board_url(None)
+    test_closed_postings_are_excluded()
     print("\n전체 통과 ✅")
