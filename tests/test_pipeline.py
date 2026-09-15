@@ -362,6 +362,81 @@ def test_portal_queries_cover_all_qualifications():
     print("  ✓ 포털·API 검색어가 자격 3종을 모두 포함")
 
 
+def test_detail_verification_catches_body_only_mentions():
+    """자격증명이 제목엔 없고 상세 우대사항에만 있는 공고를 잡아낸다.
+
+    실측 근거: 사람인 계측제어 직종 337건 중 제목에 '산업계측제어기술사'를
+    쓴 공고는 0건이었다. 목록만 봐서는 이 자격들을 잡을 수 없다.
+    동시에 검색 패딩(본문에도 자격증명이 없는 무관 공고)은 걸러져야 한다.
+    """
+    search_html = """
+    <html><body>
+      <div class="item_recruit"><a href="/jobs/view?rec_idx=301">플랜트 계장설계 경력직 채용</a></div>
+      <div class="item_recruit"><a href="/jobs/view?rec_idx=302">무등휴요양병원 영양실장 모집합니다.</a></div>
+    </body></html>"""
+    details = {
+        # 제목엔 없지만 우대사항에 자격증명이 있다 → 채택돼야 한다
+        "https://portal.example/jobs/view?rec_idx=301":
+            "<html><body><h1>플랜트 계장설계</h1>"
+            "<p>우대사항: 산업계측제어기술사 또는 전자응용기술사 보유자</p></body></html>",
+        # 검색 패딩 — 본문에도 자격증명이 없다 → 탈락해야 한다
+        "https://portal.example/jobs/view?rec_idx=302":
+            "<html><body><p>급식 영양관리 업무. 영양사 면허 필수.</p></body></html>",
+    }
+
+    calls = []
+
+    class Resp:
+        def __init__(self, text):
+            self.text = text
+
+    def fake_get(url, **kwargs):
+        calls.append(url)
+        return Resp(details.get(url, search_html))
+
+    cfg = dict(PORTAL_CFG, verify_detail=True, max_detail_fetch=10)
+    import src.collectors.portal_search as ps
+    original, ps.http.get = ps.http.get, fake_get
+    try:
+        posts, scanned = portal_collect(cfg, SETTINGS, KeywordMatcher(KEYWORDS))
+    finally:
+        ps.http.get = original
+
+    assert scanned == 2, scanned
+    assert [p.title for p in posts] == ["플랜트 계장설계 경력직 채용"], [p.title for p in posts]
+    assert set(posts[0].matched) == {"산업계측제어기술사", "전자응용기술사"}, posts[0].matched
+    assert len(calls) == 3, calls        # 검색 1회 + 상세 2회
+    print("  ✓ 상세 확인: 우대사항에만 있는 자격증명 채택 / 패딩 공고 배제")
+
+
+def test_detail_fetch_budget_is_respected():
+    """상세 조회는 상한이 있어야 한다. 없으면 실행시간과 차단 위험이 커진다."""
+    links = "".join(
+        f'<div class="item_recruit"><a href="/jobs/view?rec_idx={i}">무관한 공고 제목 {i}</a></div>'
+        for i in range(30)
+    )
+    calls = []
+
+    class Resp:
+        text = f"<html><body>{links}</body></html>"
+
+    def fake_get(url, **kwargs):
+        calls.append(url)
+        return Resp()
+
+    cfg = dict(PORTAL_CFG, verify_detail=True, max_detail_fetch=5)
+    import src.collectors.portal_search as ps
+    original, ps.http.get = ps.http.get, fake_get
+    try:
+        posts, _ = portal_collect(cfg, SETTINGS, KeywordMatcher(KEYWORDS))
+    finally:
+        ps.http.get = original
+
+    assert posts == []
+    assert len(calls) == 6, len(calls)   # 검색 1회 + 상세 5회(상한)
+    print("  ✓ 상세 조회 상한: 30건 후보 중 5건만 조회")
+
+
 if __name__ == "__main__":
     print("기술사 채용 다이제스트 — 파이프라인 테스트\n")
     test_all_three_qualifications_configured()
@@ -369,6 +444,8 @@ if __name__ == "__main__":
     test_spacing_variants_match()
     test_board_collection()
     test_portal_search_filters_padding()
+    test_detail_verification_catches_body_only_mentions()
+    test_detail_fetch_budget_is_respected()
     test_every_source_has_a_registered_collector()
     test_portal_queries_cover_all_qualifications()
     test_navigation_and_news_are_not_postings()
