@@ -75,6 +75,9 @@ def main(argv: list[str] | None = None) -> int:
                         help="메일을 보내지 않고 out/digest.html 로만 저장")
     parser.add_argument("--no-state", action="store_true",
                         help="NEW 배지 상태파일을 읽거나 쓰지 않음")
+    parser.add_argument("--probe", metavar="URL",
+                        help="설정에 없는 임의 URL을 진단한다(쉼표로 여러 개). "
+                             "JS 메뉴·AJAX 게시판의 실제 주소를 찾을 때 쓴다")
     parser.add_argument("--diagnose", metavar="SOURCE_ID",
                         help="해당 소스가 실제로 받아오는 HTML을 진단 출력하고 종료. "
                              "쉼표로 여러 개 지정 가능, all 이면 전체. "
@@ -87,6 +90,16 @@ def main(argv: list[str] | None = None) -> int:
     cfg = yaml.safe_load(CONFIG.read_text(encoding="utf-8"))
     matcher = KeywordMatcher(cfg.get("keywords", {}))
     today = date.today()
+
+    if args.probe:
+        quals = cfg["keywords"]["qualifications"]
+        for url in [u.strip() for u in args.probe.split(",") if u.strip()]:
+            try:
+                diagnose.run({"id": "probe", "name": "임의 URL", "url": url},
+                             cfg, quals)
+            except Exception:  # noqa: BLE001
+                log.exception("probe 실패: %s", url)
+        return 0
 
     if args.diagnose:
         wanted = {x.strip() for x in args.diagnose.split(",") if x.strip()}

@@ -12,7 +12,11 @@ on:
         type: boolean
         default: false
       diagnose:
-        description: "소스 진단 (소스 id 또는 all). 예: kpea — 선택자·로그인 문제 파악용"
+        description: "소스 진단 (소스 id, 쉼표 구분, 또는 all)"
+        type: string
+        default: ''
+      probe:
+        description: "임의 URL 진단 (쉼표 구분). JS 메뉴·AJAX 게시판의 실제 주소 찾기용"
         type: string
         default: ''
 
@@ -57,7 +61,9 @@ jobs:
           GAMLI_ID: ${{ secrets.GAMLI_ID }}
           GAMLI_PW: ${{ secrets.GAMLI_PW }}
         run: |
-          if [ -n "${{ inputs.diagnose }}" ]; then
+          if [ -n "${{ inputs.probe }}" ]; then
+            python -m src.main --probe "${{ inputs.probe }}"
+          elif [ -n "${{ inputs.diagnose }}" ]; then
             python -m src.main --diagnose "${{ inputs.diagnose }}"
           else
             python -m src.main ${{ inputs.dry_run && '--dry-run' || '' }}
@@ -73,7 +79,7 @@ jobs:
           if-no-files-found: warn
 
       - name: 조회 이력 커밋
-        if: success() && !inputs.dry_run && !inputs.diagnose
+        if: success() && !inputs.dry_run && !inputs.diagnose && !inputs.probe
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
