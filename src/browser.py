@@ -47,6 +47,15 @@ def _do_login(page, login: dict, timeout_ms: int) -> None:
     회원 전용 게시판의 실제 주소를 모를 때 이 경로가 유일한 방법이다.
     """
     page.goto(login["url"], wait_until="domcontentloaded", timeout=timeout_ms)
+
+    # 폼이 스크립트로 늦게 붙는 경우가 있다. 'attached'로 기다리면 화면에
+    # 보이지 않아도(레이어 팝업) DOM에 생기는 즉시 진행한다.
+    field = f'input[name="{login["id_field"]}"]'
+    try:
+        page.wait_for_selector(field, state="attached", timeout=10000)
+    except Exception:  # noqa: BLE001
+        log.warning("로그인 폼(%s)이 나타나지 않음 — 그래도 시도", field)
+
     try:
         result = page.evaluate(
             _LOGIN_JS,

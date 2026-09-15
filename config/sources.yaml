@@ -117,8 +117,9 @@ sources:
     login:
       url: https://itpe.or.kr/modules/member/memberProcess.php
       # form_url이 있으면 브라우저가 이 페이지에서 폼을 채워 로그인한다.
-      # 로그인 후 JS 메뉴를 그대로 클릭할 수 있어 주소를 몰라도 된다.
-      form_url: https://itpe.or.kr/main/ko/index.html
+      # 로그인 폼은 메인 페이지가 아니라 회원 페이지에 있다(실측: 메인에서
+      # 시도하면 no-field). menu('sub7_1')이 이동하는 주소가 바로 여기다.
+      form_url: https://itpe.or.kr/modules/member/index.php?lang_type=ko
       id_field: userID
       pw_field: password
       id_env: ITPE_ID
