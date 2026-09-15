@@ -1,0 +1,158 @@
+# 기술사 채용공고 일일 수집 설정
+# ---------------------------------------------------------------
+# recency_days : 이 일수 이내 공고는 "최신"으로 본문 상단에 배치.
+#                초과분은 리포트 하단 "참고(오래된 공고)" 섹션으로 이동.
+# ---------------------------------------------------------------
+
+recency_days: 183          # 약 6개월
+max_items_per_source: 60
+request_timeout: 25
+request_delay: 1.2         # 소스별 요청 간 최소 간격(초) - 예의상 rate limit
+
+keywords:
+  # primary: 하나라도 걸리면 무조건 채택 (사용자 보유 자격 3종)
+  primary:
+    - 정보통신기술사
+    - 산업계측제어기술사
+    - 전자응용기술사
+    - 정보공학기술사
+  # secondary: 'context' 단어와 함께 나올 때만 채택 (오탐 억제)
+  secondary:
+    - 기술사
+    - 수석감리원
+    - 특급감리원
+    - 특급기술자
+  context:
+    - 정보통신
+    - 통신
+    - 감리
+    - 계측
+    - 제어
+    - 계장
+    - 전자
+    - 정보시스템
+    - 엔지니어링
+    - 설계
+    - PM
+  # 제외: 학원/교재/수강생 모집 등 채용이 아닌 글 걸러내기
+  exclude:
+    - 수강생
+    - 수강료
+    - 개강
+    - 교재
+    - 인강
+    - 기출문제
+    - 합격수기
+    - 스터디원
+    - 학원등록
+
+sources:
+
+  - id: kpea
+    name: 한국기술사회 구인정보
+    org: 한국기술사회(KPEA)
+    type: html_board
+    url: https://www.kpea.or.kr/kpea/member/OfferList.do
+    base: https://www.kpea.or.kr
+    enabled: true
+    # 게시판 목록 테이블. 선택자는 사이트 개편 시 여기만 고치면 됨.
+    row_selector: "table tbody tr"
+    title_selector: "a"
+    date_selector: "td:nth-last-child(1), td:nth-last-child(2)"
+    link_attr: href
+
+  - id: itpe
+    name: 한국정보통신기술사회 채용/구인
+    org: 한국정보통신기술사회(ITPE)
+    type: html_board
+    url: https://www.itpe.or.kr/
+    base: https://www.itpe.or.kr
+    enabled: true
+    row_selector: "table tbody tr, ul li"
+    title_selector: "a"
+    date_selector: "td, span, em"
+    link_attr: href
+
+  - id: pesk
+    name: 대한기술사회 구인구직
+    org: 대한기술사회(PESK)
+    type: html_board
+    url: https://pesk.or.kr/?pg_idx=145
+    base: https://pesk.or.kr
+    enabled: true
+    row_selector: "table tbody tr, ul li"
+    title_selector: "a"
+    date_selector: "td, span"
+    link_attr: href
+
+  - id: kica
+    name: 한국정보통신공사협회 채용정보
+    org: 한국정보통신공사협회(KICA)
+    type: html_board
+    url: https://www.kica.or.kr/job/hireIndex
+    base: https://www.kica.or.kr
+    enabled: true
+    row_selector: "table tbody tr, ul li, div.list_item"
+    title_selector: "a"
+    date_selector: "td, span, .date"
+    link_attr: href
+
+  - id: etis
+    name: 한국엔지니어링협회 ETIS 구인
+    org: 한국엔지니어링협회(KENCA/ETIS)
+    type: html_board
+    url: https://www.etis.or.kr/jobGuinList.do
+    base: https://www.etis.or.kr
+    enabled: true
+    row_selector: "table tbody tr, ul li"
+    title_selector: "a"
+    date_selector: "td, span"
+    link_attr: href
+
+  - id: kacem
+    name: 한국건설엔지니어링협회 구인
+    org: 한국건설엔지니어링협회(KACEM)
+    type: html_board
+    url: http://www.ekacem.or.kr/openspace/job_offerring_li.asp
+    base: http://www.ekacem.or.kr/openspace/
+    enabled: true
+    row_selector: "table tr"
+    title_selector: "a"
+    date_selector: "td"
+    link_attr: href
+
+  - id: saramin
+    name: 사람인
+    org: 사람인
+    type: saramin
+    enabled: true
+    # SARAMIN_API_KEY 시크릿이 있으면 공식 오픈 API, 없으면 공개 검색 HTML 폴백
+    api_url: https://oapi.saramin.co.kr/job-search
+    search_url: https://www.saramin.co.kr/zf_user/search/recruit
+    queries:
+      - 정보통신기술사
+      - 산업계측제어기술사
+      - 전자응용기술사
+
+  - id: jobkorea
+    name: 잡코리아
+    org: 잡코리아
+    type: jobkorea
+    enabled: true
+    search_url: https://www.jobkorea.co.kr/Search/
+    queries:
+      - 정보통신기술사
+      - 산업계측제어기술사
+      - 전자응용기술사
+
+  - id: work24
+    name: 고용24(워크넷) 공공 API
+    org: 고용노동부 고용24
+    type: work24
+    enabled: true
+    # WORK24_API_KEY(공공데이터포털 인증키)가 있을 때만 동작
+    api_url: https://apis.data.go.kr/1051000/recruitment/list
+    queries:
+      - 정보통신기술사
+      - 산업계측제어기술사
+      - 전자응용기술사

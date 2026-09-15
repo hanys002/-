@@ -1,1 +1,144 @@
-# -
+# 기술사 채용공고 데일리 브리핑
+
+**정보통신기술사 · 산업계측제어기술사 · 전자응용기술사** 채용공고를 매일 **09:00(KST)** 에
+수집해 Gmail로 발송하는 자동화 파이프라인.
+
+---
+
+## 1. 동작 개요
+
+```
+GitHub Actions (cron 0 0 * * * UTC = 09:00 KST)
+        │
+        ├─ 협회 게시판 6곳  ─┐
+        ├─ 사람인 (API/HTML) ├─→ 키워드 필터 → 중복제거 → 최신순 정렬
+        ├─ 잡코리아          │                              │
+        └─ 고용24 공공 API  ─┘                    ┌─────────┴─────────┐
+                                              최근 6개월 이내      6개월 초과
+                                                (본문 상단)      (하단 '참고')
+                                                       └────┬────┘
+                                                     HTML 메일 → Gmail SMTP
+```
+
+### 설계 근거
+
+| 결정 | 근거 |
+|---|---|
+| GitHub Actions에서 실행 | 국내 채용 사이트는 해외 클라우드/프록시에서 403을 주는 경우가 많음. Actions 러너는 egress 제한이 없고 무료(퍼블릭) 또는 월 2,000분(프라이빗) 내에서 충분 |
+| 소스별 오류 격리 | 한 사이트가 개편·차단돼도 나머지는 정상 발송. 실패 소스는 메일 하단 **수집 소스 상태**에 그대로 표기 |
+| 선택자 YAML 분리 + 폴백 | 협회 게시판은 개편이 잦음. `config/sources.yaml`만 고치면 되고, 선택자가 완전히 빗나가면 전체 `<a>` 스캔 폴백으로 전환 |
+| 공식 API 우선 | 사람인·고용24는 오픈 API 제공. 키가 있으면 API, 없으면 HTML 폴백 (`robots.txt`·이용약관 준수 범위 내 저빈도 1일 1회 조회) |
+| 상태파일(`state/seen.json`) | 처음 보는 공고에만 **NEW** 배지. 매일 같은 공고를 다시 읽는 피로 제거 |
+
+---
+
+## 2. 수집 소스
+
+| ID | 기관 | URL |
+|---|---|---|
+| `kpea` | 한국기술사회 | https://www.kpea.or.kr/kpea/member/OfferList.do |
+| `itpe` | 한국정보통신기술사회 | https://www.itpe.or.kr/ |
+| `pesk` | 대한기술사회 | https://pesk.or.kr/?pg_idx=145 |
+| `kica` | 한국정보통신공사협회 | https://www.kica.or.kr/job/hireIndex |
+| `etis` | 한국엔지니어링협회(ETIS) | https://www.etis.or.kr/jobGuinList.do |
+| `kacem` | 한국건설엔지니어링협회 | http://www.ekacem.or.kr/openspace/job_offerring_li.asp |
+| `saramin` | 사람인 | https://www.saramin.co.kr/ |
+| `jobkorea` | 잡코리아 | https://www.jobkorea.co.kr/ |
+| `work24` | 고용24(워크넷) | https://www.work24.go.kr/ |
+
+---
+
+## 3. 설정 (최초 1회, 약 5분)
+
+### 3-1. Gmail 앱 비밀번호 발급 — **필수**
+
+Google은 2022년 5월부터 일반 비밀번호를 통한 SMTP 인증을 폐지했습니다. 앱 비밀번호가 필요합니다.
+
+1. https://myaccount.google.com/security → **2단계 인증**을 먼저 켭니다.
+2. https://myaccount.google.com/apppasswords 접속
+3. 앱 이름에 `job-digest` 입력 → **만들기**
+4. 표시되는 **16자리 문자열**을 복사 (공백은 무시됨, 창을 닫으면 다시 못 봅니다)
+
+### 3-2. 리포지터리 시크릿 등록 — **필수**
+
+`Settings → Secrets and variables → Actions → New repository secret`
+
+| 이름 | 값 |
+|---|---|
+| `GMAIL_USER` | `hanys002@gmail.com` |
+| `GMAIL_APP_PASSWORD` | 위에서 받은 16자리 앱 비밀번호 |
+
+> 다른 주소로 받으려면 `Variables` 탭에 `MAIL_TO`를 추가하세요. 없으면 `GMAIL_USER`로 발송됩니다.
+
+### 3-3. 오픈 API 키 등록 — 선택 (권장)
+
+키가 없어도 HTML 폴백으로 동작하지만, 있으면 수집 안정성과 정확도가 크게 올라갑니다.
+
+| 시크릿 | 발급처 |
+|---|---|
+| `SARAMIN_API_KEY` | https://oapi.saramin.co.kr/ (무료, 승인 즉시) |
+| `WORK24_API_KEY` | https://www.data.go.kr/ → '채용정보' 활용신청 (무료) |
+
+### 3-4. 예약 실행 활성화 — **중요**
+
+> GitHub Actions의 `schedule` 트리거는 **기본 브랜치(main)에 있는 워크플로만** 동작합니다.
+> 작업 브랜치에 머물러 있으면 예약 실행이 되지 않으니, 반드시 `main`에 병합하세요.
+
+병합 후 `Actions` 탭 → **기술사 채용공고 데일리 메일** → `Run workflow`로 즉시 1회 테스트하는 것을 권장합니다.
+
+---
+
+## 4. 로컬 실행
+
+```bash
+pip install -r requirements.txt
+
+# 메일 없이 리포트만 생성 → out/digest.html
+python -m src.main --dry-run
+
+# 실제 발송
+export GMAIL_USER=hanys002@gmail.com
+export GMAIL_APP_PASSWORD='xxxxxxxxxxxxxxxx'
+python -m src.main
+
+# 테스트 (네트워크 불필요)
+python tests/test_pipeline.py
+```
+
+---
+
+## 5. 튜닝
+
+`config/sources.yaml` 한 곳에서 조정합니다.
+
+```yaml
+recency_days: 183     # '최근' 기준일. 이 값을 넘으면 하단 '참고' 섹션으로
+keywords:
+  primary:   [...]    # 하나라도 걸리면 무조건 채택
+  secondary: [...]    # context 단어와 함께 나올 때만 채택
+  context:   [...]
+  exclude:   [...]    # 학원 수강생 모집 등 채용 아닌 글 차단
+sources:
+  - id: kpea
+    enabled: true     # false로 두면 해당 소스 제외
+```
+
+**공고가 적게 잡힐 때** → `secondary`/`context` 확장
+**광고성 글이 섞일 때** → `exclude` 확장
+
+---
+
+## 6. 유지보수
+
+메일 하단 **수집 소스 상태**가 진단 창구입니다.
+
+| 증상 | 조치 |
+|---|---|
+| 특정 소스 `실패 — HTTPError: 404` | 사이트 개편. `config/sources.yaml`의 `url` 갱신 |
+| `정상 — 0건 스캔` | 선택자 미적중. `row_selector`/`title_selector` 수정 |
+| `정상 — N건 스캔 / 0건 적합` | 정상 동작이나 키워드 미매칭. `keywords` 확장 검토 |
+| `건너뜀 — WORK24_API_KEY 미설정` | 3-3의 키 등록 (선택) |
+| 메일이 아예 안 옴 | `Actions` 탭에서 실행 로그 확인. 앱 비밀번호 만료가 가장 흔함 |
+
+JS 렌더링 기반으로 개편된 사이트는 정적 파싱이 불가합니다. 이 경우 해당 소스를
+`enabled: false`로 내리고 Playwright 수집기를 추가하는 것이 정석입니다.

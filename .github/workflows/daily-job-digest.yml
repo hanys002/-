@@ -1,0 +1,71 @@
+name: 기술사 채용공고 데일리 메일
+
+on:
+  schedule:
+    # UTC 00:00 = KST 09:00. GitHub 스케줄러는 부하에 따라 수 분 지연될 수 있습니다.
+    # 주의: 예약 실행은 '기본 브랜치'에 있는 워크플로만 동작합니다.
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: '메일 발송 없이 리포트만 생성'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write        # state/seen.json 커밋용
+
+concurrency:
+  group: job-digest
+  cancel-in-progress: false
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: 의존성 설치
+        run: pip install -r requirements.txt
+
+      - name: 파이프라인 테스트
+        run: python tests/test_pipeline.py
+
+      - name: 수집 및 발송
+        env:
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          MAIL_TO: ${{ vars.MAIL_TO || secrets.GMAIL_USER }}
+          SARAMIN_API_KEY: ${{ secrets.SARAMIN_API_KEY }}
+          WORK24_API_KEY: ${{ secrets.WORK24_API_KEY }}
+        run: |
+          python -m src.main ${{ inputs.dry_run && '--dry-run' || '' }}
+
+      - name: 리포트 아티팩트 업로드
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: digest-${{ github.run_number }}
+          path: out/digest.html
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: 조회 이력 커밋
+        if: success() && !inputs.dry_run
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add state/seen.json
+          if git diff --cached --quiet; then
+            echo "변경 없음 — 커밋 생략"
+          else
+            git commit -m "chore(state): 조회 이력 갱신 $(date -u +%Y-%m-%d) [skip ci]"
+            git push
+          fi
