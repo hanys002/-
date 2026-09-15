@@ -21,7 +21,7 @@ LOGIN_MARKERS = ["로그인", "login", "아이디", "비밀번호", "회원만",
 LOGOUT_MARKERS = ["로그아웃", "logout"]
 
 
-def _summarize_links(soup, limit: int = 25) -> list[tuple[str, str]]:
+def _summarize_links(soup, limit: int = 10) -> list[tuple[str, str]]:
     out = []
     for a in soup.find_all("a", href=True):
         text = a.get_text(" ", strip=True)
@@ -80,11 +80,13 @@ def run(cfg: dict, settings: dict, qualifications: list[str], session=None) -> N
                  cfg["row_selector"], len(soup.select(cfg["row_selector"])))
 
     # 핵심: 자격증명이 받아온 HTML 안에 실제로 있는가
+    found_summary: list[str] = []
     for q in qualifications:
         hits = [m.start() for m in re.finditer(re.escape(q), text)]
         if hits:
             around = text[max(0, hits[0] - 60):hits[0] + 80].replace("\n", " ")
             log.info("'%s' %d회 발견 → …%s…", q, len(hits), around)
+            found_summary.append(f"{q}×{len(hits)}")
         else:
             # '정보통신 기술사'처럼 공백을 넣어 쓴 표기도 확인한다.
             loose = r"\s*".join(re.escape(ch) for ch in q)
@@ -92,7 +94,13 @@ def run(cfg: dict, settings: dict, qualifications: list[str], session=None) -> N
             log.info("'%s' 0회 (공백 허용 매칭 %d회%s)", q, len(found),
                      f" 예: {found[0]!r}" if found else "")
 
-    log.info("링크 상위 %d개:", 25)
+    # 여러 후보를 한 번에 던질 때 이 한 줄만 훑으면 된다.
+    log.info("판정 ▶ [%s] HTTP %s | %sB | rows=%s | 자격: %s | %s",
+             cfg["id"], resp.status_code, len(body),
+             len(soup.select(cfg["row_selector"])) if cfg.get("row_selector") else "-",
+             ", ".join(found_summary) or "없음", url)
+
+    log.info("링크 상위 %d개:", 10)
     for t, h in _summarize_links(soup):
         log.info("    %-70s %s", t, h)
     log.info("=" * 70)
