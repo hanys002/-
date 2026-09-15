@@ -50,7 +50,7 @@ def run(cfg: dict, settings: dict, qualifications: list[str], session=None) -> N
     text = soup.get_text(" ", strip=True)
 
     log.info("HTTP %s | %s bytes | encoding=%s", resp.status_code, len(body), resp.encoding)
-    log.info("최종 URL: %s", resp.url)
+    log.info("최종 URL: %s", getattr(resp, "url", url))   # 리다이렉트 추적 결과
     if len(body) < 2000:
         # 응답이 작으면 JS 리다이렉트·프레임·차단 안내인 경우가 많다.
         # 구조 분석이 무의미하므로 원문을 그대로 보여준다.
