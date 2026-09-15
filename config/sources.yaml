@@ -68,6 +68,13 @@ keywords:
     - 구인하였습니다
     - 채용하였습니다
 
+# 포털·API에 던질 검색어. 자격증명 그대로 쓴다.
+# 이건 '어디를 볼지'를 정할 뿐이고, 채택 여부는 keywords.qualifications가 정한다.
+qualification_queries: &qualification_queries
+  - 정보통신기술사
+  - 산업계측제어기술사
+  - 전자응용기술사
+
 sources:
 
   - id: kpea
@@ -168,41 +175,102 @@ sources:
     date_selector: "time, .date, span"
     link_attr: href
 
+  # ── 채용포털 (type: portal_search) ───────────────────────────────
+  # 포털 검색은 필터가 아니다. 일치 건이 적으면 무관 공고로 결과를 채우므로
+  # 채택 여부는 자격증명 매칭으로만 결정한다. queries는 '어디를 볼지'일 뿐.
+
   - id: saramin
     name: 사람인
     org: 사람인
-    type: saramin
+    type: portal_search
     enabled: true
-    max_items: 20   # 포털은 검색 자체가 필터라 건수가 많다 — 최신순 상위만
-    # SARAMIN_API_KEY 시크릿이 있으면 공식 오픈 API, 없으면 공개 검색 HTML 폴백
-    api_url: https://oapi.saramin.co.kr/job-search
     search_url: https://www.saramin.co.kr/zf_user/search/recruit
-    queries:
-      - 정보통신기술사
-      - 산업계측제어기술사
-      - 전자응용기술사
+    base: https://www.saramin.co.kr
+    query_param: searchword
+    extra_params:
+      recruitSort: reg_dt
+      recruitPageCount: 40
+    detail_hints: ["rec_idx="]
+    max_items: 20
+    queries: *qualification_queries
 
   - id: jobkorea
     name: 잡코리아
     org: 잡코리아
-    type: jobkorea
+    type: portal_search
     enabled: true
-    max_items: 20   # 포털은 검색 자체가 필터라 건수가 많다 — 최신순 상위만
     search_url: https://www.jobkorea.co.kr/Search/
-    queries:
-      - 정보통신기술사
-      - 산업계측제어기술사
-      - 전자응용기술사
+    base: https://www.jobkorea.co.kr
+    query_param: stext
+    extra_params:
+      tabType: recruit
+    detail_hints: ["/Recruit/GI_Read"]
+    max_items: 20
+    queries: *qualification_queries
 
+  - id: incruit
+    name: 인크루트
+    org: 인크루트
+    type: portal_search
+    # 인크루트는 자격증 기준 색인을 제공해 기술사급 공고 적중률이 높다.
+    enabled: true
+    search_url: https://job.incruit.com/jobdb_list/searchjob.asp
+    base: https://job.incruit.com
+    query_param: kw
+    detail_hints: ["/jobdb_info/jobpost.asp", "/entrjob/"]
+    max_items: 20
+    queries: *qualification_queries
+
+  # ── 플랜트·계장·전자 분야 (산업계측제어·전자응용기술사 대응) ────────
+  # 감리협회는 정보통신 전용이라 이 두 자격이 올라오지 않는다.
+  # 아래는 해당 분야 공고가 실제로 게시되는 곳들.
+
+  - id: saramin_control
+    name: 사람인 계측제어 직종
+    org: 사람인(계측제어)
+    type: html_board
+    # 키워드 검색이 아니라 직종 카테고리 목록. 플랜트 계장·제어 공고가 모인다.
+    url: https://www.saramin.co.kr/zf_user/jobs/list/job-category?cat_kewd=1125
+    base: https://www.saramin.co.kr
+    enabled: true
+    row_selector: ".item_recruit, .list_item"
+    title_selector: "a"
+    date_selector: ".job_date, .date"
+    link_attr: href
+
+  - id: saramin_electronics
+    name: 사람인 전자·반도체 직종
+    org: 사람인(전자)
+    type: html_board
+    url: https://www.saramin.co.kr/zf_user/jobs/list/job-category?cat_kewd=1260
+    base: https://www.saramin.co.kr
+    enabled: true
+    row_selector: ".item_recruit, .list_item"
+    title_selector: "a"
+    date_selector: ".job_date, .date"
+    link_attr: href
+
+  - id: kopia
+    name: 한국플랜트산업협회
+    org: 한국플랜트산업협회(KOPIA)
+    type: html_board
+    url: https://www.kopia.or.kr/business/professional.php
+    base: https://www.kopia.or.kr/business/
+    enabled: true
+    row_selector: "table tbody tr, table tr, ul li"
+    title_selector: "a"
+    date_selector: "td, span, .date"
+    link_attr: href
+
+  # ── 공공 (전 산업 포괄 — 두 자격 대응에 가장 유효) ──────────────────
   - id: work24
-    name: 고용24(워크넷) 공공 API
-    org: 고용노동부 고용24
+    name: 워크넷 채용정보 공공 API
+    org: 고용노동부 워크넷
     type: work24
     enabled: true
-    max_items: 20   # 포털은 검색 자체가 필터라 건수가 많다 — 최신순 상위만
-    # WORK24_API_KEY(공공데이터포털 인증키)가 있을 때만 동작
-    api_url: https://apis.data.go.kr/1051000/recruitment/list
-    queries:
-      - 정보통신기술사
-      - 산업계측제어기술사
-      - 전자응용기술사
+    # WORK24_API_KEY(워크넷 오픈API 인증키)가 있을 때만 동작.
+    # 전 산업·전 지역을 포괄해 플랜트·계장 공고까지 들어온다.
+    # 발급: https://www.data.go.kr/data/3038225/openapi.do
+    api_url: https://openapi.work.go.kr/opi/opi/opiService/wantedApi.do
+    max_items: 30
+    queries: *qualification_queries

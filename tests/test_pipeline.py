@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src import http  # noqa: E402
 from src.collectors.generic_board import collect as board_collect  # noqa: E402
+from src.collectors.portal_search import collect as portal_collect  # noqa: E402
 from src.filters import KeywordMatcher, parse_date  # noqa: E402
 from src.main import dedupe  # noqa: E402
 from src.models import Posting  # noqa: E402
@@ -296,12 +297,80 @@ def test_html_report_renders_links_and_escapes():
     print("  ✓ HTML 리포트: 링크/이스케이프/NEW 배지 정상")
 
 
+PORTAL_CFG = {
+    "id": "testportal", "name": "테스트포털", "org": "포털",
+    "search_url": "https://portal.example/search", "base": "https://portal.example",
+    "query_param": "kw", "detail_hints": ["rec_idx="], "max_items": 20,
+    "queries": ["정보통신기술사"],
+}
+
+PORTAL_HTML = """
+<html><body>
+  <div class="item_recruit">
+    <a href="/jobs/view?rec_idx=111">정보통신기술사 감리 경력자 채용</a>
+    <span class="corp_name"><a>가나기술단</a></span><span class="date">2026-09-10</span>
+  </div>
+  <div class="item_recruit">
+    <a href="/jobs/view?rec_idx=222">무등휴요양병원 영양실장 모집합니다.</a>
+    <span class="corp_name"><a>무등휴요양병원</a></span>
+  </div>
+  <div class="item_recruit">
+    <a href="/jobs/view?rec_idx=111">정보통신기술사 감리 경력자 채용</a>
+  </div>
+  <a href="/company/intro">회사소개</a>
+</body></html>"""
+
+
+def test_portal_search_filters_padding():
+    """포털은 일치 건이 적으면 무관 공고로 결과를 채운다 — 자격증명으로만 채택."""
+    class Resp:
+        text = PORTAL_HTML
+
+    import src.collectors.portal_search as ps
+    original, ps.http.get = ps.http.get, lambda *a, **k: Resp()
+    try:
+        posts, scanned = portal_collect(PORTAL_CFG, SETTINGS, KeywordMatcher(KEYWORDS))
+    finally:
+        ps.http.get = original
+
+    assert scanned == 2, scanned                       # rec_idx 중복·회사소개 제외
+    assert [p.title for p in posts] == ["정보통신기술사 감리 경력자 채용"]
+    assert posts[0].url == "https://portal.example/jobs/view?rec_idx=111"
+    assert posts[0].company == "가나기술단"
+    assert posts[0].posted_on == date(2026, 9, 10)
+    print("  ✓ 포털 검색: 패딩 공고 배제 + rec_idx 중복 제거")
+
+
+def test_every_source_has_a_registered_collector():
+    """설정에 타입 오타가 나면 조용히 소스가 빠진다 — 발송 전에 잡는다."""
+    from src.collectors import REGISTRY
+    unknown = [
+        f"{src['id']}({src.get('type')})"
+        for src in CONFIG["sources"]
+        if src.get("type") not in REGISTRY
+    ]
+    assert not unknown, unknown
+    print(f"  ✓ 소스 {len(CONFIG['sources'])}곳 전부 등록된 수집기 사용")
+
+
+def test_portal_queries_cover_all_qualifications():
+    """포털에 세 자격을 모두 던져야 한다. 하나라도 빠지면 그 자격은 안 걸린다."""
+    quals = set(KEYWORDS["qualifications"])
+    for src in CONFIG["sources"]:
+        if src.get("type") in ("portal_search", "work24"):
+            assert set(src["queries"]) == quals, f"{src['id']}: {src['queries']}"
+    print("  ✓ 포털·API 검색어가 자격 3종을 모두 포함")
+
+
 if __name__ == "__main__":
     print("기술사 채용 다이제스트 — 파이프라인 테스트\n")
     test_all_three_qualifications_configured()
     test_only_qualifications_are_matched()
     test_spacing_variants_match()
     test_board_collection()
+    test_portal_search_filters_padding()
+    test_every_source_has_a_registered_collector()
+    test_portal_queries_cover_all_qualifications()
     test_navigation_and_news_are_not_postings()
     test_unusable_links_fall_back_to_board_url()
     test_date_parsing()
