@@ -100,16 +100,22 @@ sources:
     name: 한국정보통신기술사회 열린공간
     org: 한국정보통신기술사회(ITPE)
     type: html_board
-    # 회원 전용 게시판. 주소는 로그인한 브라우저가 menu('sub7_1')로 실제
-    # 이동한 결과에서 확보했다. bbsList.php로 9번 추측했던 것이 전부 404였고,
-    # 실제 파일명은 index.php, 게시판 코드는 bbs_sb0701이었다.
-    url: https://itpe.or.kr/modules/bbs/index.php?code=bbs_sb0701&xid=2
+    # menu('sub7_1')이 데려간 bbs_sb0701은 '자유게시판'이었다. 실측 게시물이
+    # 서적 소개·전시회 안내·출마의 변이었고 구인글이 하나도 없었다.
+    # 구인게시판은 '정회원 코너' 안에 따로 있다(내비 실측).
+    #   ul.sgnb_sb4 > li  - 행사공지/참가신청  menu('sub4_1')
+    #                     - 회원검색          menu('sub4_2')
+    #                     - 구인게시판        menu('sub4_4')  ← 이것
+    # 게시판 코드를 또 추측하지 않는다. 로그인한 브라우저가 메뉴를 눌러
+    # 실제로 도착한 곳을 쓴다.
+    url: https://itpe.or.kr/main/ko/index.html
+    eval_js: "menu('sub4_4')"
     base: https://itpe.or.kr/modules/bbs/
     enabled: true
     render: true
-    # 목록 표가 그려질 때까지 기다린다.
-    wait_for: "table tbody tr, table tr"
-    row_selector: "table tbody tr, table tr"
+    # 목록은 표가 아니라 bbsView.php 링크 묶음이다(자유게시판 실측).
+    wait_for: "a[href*='bbsView.php']"
+    row_selector: "a[href*='bbsView.php']"
     title_selector: "a"
     date_selector: "td"
     link_attr: href
@@ -148,6 +154,10 @@ sources:
     url: https://www.kica.or.kr/job/hireIndex
     base: https://www.kica.or.kr
     enabled: true
+    # 정적 요청은 140KB를 받아오지만 전부 사이트 껍데기였다(자격 0회,
+    # 380행이 모두 내비게이션). 목록을 스크립트가 채우는 것으로 보고 렌더링한다.
+    render: true
+    wait_for: "table tbody tr, div.list_item"
     row_selector: "table tbody tr, ul li, div.list_item"
     title_selector: "a"
     date_selector: "td, span, .date"
@@ -203,7 +213,9 @@ sources:
     name: 한국정보공학기술사회 구인
     org: 한국정보공학기술사회(KAPIE)
     type: html_board
-    url: https://kapie.or.kr/
+    # 홈페이지를 긁고 있었다. 실측에서 자격 0회에 78행이 전부 메뉴였다.
+    # 구인구직 게시판은 '회원공간' 아래 따로 있다(내비에서 확보한 주소).
+    url: https://kapie.or.kr/%ea%b5%ac%ec%9d%b8%ea%b5%ac%ec%a7%81/
     base: https://kapie.or.kr/
     enabled: true
     row_selector: "article, .post, ul li"
@@ -306,9 +318,13 @@ sources:
     name: 한국플랜트산업협회
     org: 한국플랜트산업협회(KOPIA)
     type: html_board
+    # 이 주소는 '전문인력양성' 사업 소개 페이지지 게시판이 아니다.
+    # 실측: 21KB, 자격 0회, 80행이 전부 메뉴. 채용글이 있을 자리가 없다.
+    # 추측으로 다른 주소를 넣지 않고 끈다. 플랜트·계장 분야 공고는
+    # WORK24 오픈API(work24 소스)로 받는 것이 정공법이다.
     url: https://www.kopia.or.kr/business/professional.php
     base: https://www.kopia.or.kr/business/
-    enabled: true
+    enabled: false
     row_selector: "table tbody tr, table tr, ul li"
     title_selector: "a"
     date_selector: "td, span, .date"

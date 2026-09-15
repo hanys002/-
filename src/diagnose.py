@@ -37,7 +37,9 @@ def _summarize_links(soup, limit: int = 10) -> list[tuple[str, str]]:
 def _list_candidates(soup, limit: int = 6) -> list[tuple[str, int, list[str]]]:
     seen: dict[int, tuple[str, int, list[str]]] = {}
     for parent in soup.find_all(["ul", "ol", "tbody", "table", "div", "section"]):
-        kids = [c for c in parent.find_all(recursive=False) if c.name in ("li", "tr", "div", "a", "dl")]
+        # 자식 태그를 미리 정해두면 p·span·dt·article로 늘어선 목록을 놓친다.
+        # 어떤 태그든 '가장 많이 반복된 자식'을 행으로 본다.
+        kids = [c for c in parent.find_all(recursive=False) if c.name]
         if len(kids) < 4:
             continue
         tag = max({k.name for k in kids}, key=lambda n: sum(1 for k in kids if k.name == n))

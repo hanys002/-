@@ -91,9 +91,22 @@ def collect(cfg: dict, settings: dict, matcher: KeywordMatcher) -> tuple[list[Po
     scanned = 0
 
     for row in rows:
-        for anchor in row.select(cfg.get("title_selector", "a")):
+        anchors = row.select(cfg.get("title_selector", "a"))
+        # 목록이 표가 아니라 링크 묶음인 게시판이 있다(정보통신기술사회 실측:
+        # table=1이 검색 폼이고 글은 bbsView.php 링크로만 늘어서 있다).
+        # 그 경우 row_selector가 <a>를 직접 가리키는데, select()는 자손만 보므로
+        # 행 자신을 놓친다.
+        if not anchors and row.name == "a":
+            anchors = [row]
+
+        for anchor in anchors:
             scanned += 1
-            item = _make_posting(cfg, anchor, row, matcher)
+            # 날짜·부가정보는 링크 바깥 형제 칸에 있다. 행이 곧 링크면
+            # 한 단계 올려 잡아야 날짜가 보인다.
+            ctx = row
+            if ctx is anchor:
+                ctx = anchor.find_parent(["tr", "li", "article", "div"]) or anchor
+            item = _make_posting(cfg, anchor, ctx, matcher)
             if item:
                 postings.append(item)
 
