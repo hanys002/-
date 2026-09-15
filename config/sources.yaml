@@ -107,8 +107,9 @@ sources:
     # ITPE_ID/ITPE_PW 시크릿이 있어야 목록이 보인다.
     url: https://itpe.or.kr/main/ko/sub07_01.html
     base: https://itpe.or.kr/main/ko/
+    # eval_js는 쓰지 않는다. sub07_01.html을 직접 열므로 menu() 함수가 없고,
+    # 호출하면 ReferenceError로 수집 전체가 실패한다(실측).
     render: true
-    eval_js: "menu('sub7_1')"
     enabled: true
     # 로그인 폼 필드명은 브라우저 렌더링 진단으로 확인한 실제 값이다.
     # (추정값 userId/userPw는 틀렸다)
