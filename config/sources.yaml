@@ -80,25 +80,21 @@ sources:
   - id: kpea
     name: 한국기술사회 구인정보
     org: 한국기술사회(KPEA)
-    type: html_board
+    type: row_board
     url: https://www.kpea.or.kr/kpea/member/OfferList.do
     base: https://www.kpea.or.kr
     enabled: true
-    # 게시판 목록 테이블. 선택자는 사이트 개편 시 여기만 고치면 됨.
+    # 일반 게시판이 아니라 표다. 제목 컬럼이 없고 셀에 정보가 나뉘어 있다.
+    #   번호 | 구분 | 모집 자격종목 | 회사 | 지역 | 마감일 | 등록일 | 조회
+    # 진단(--diagnose kpea)으로 확인한 실제 구조. 로그인은 필요 없다.
     row_selector: "table tbody tr"
-    title_selector: "a"
-    date_selector: "td:nth-last-child(1), td:nth-last-child(2)"
-    link_attr: href
-    # 회원 전용 게시판이면 로그인해야 목록이 보인다.
-    # 아이디·비밀번호는 여기 적지 말 것 — GitHub 시크릿에서만 읽는다.
-    # 실제 폼 필드명은 `--diagnose kpea` 결과를 보고 맞춘다.
-    login:
-      url: https://www.kpea.or.kr/kpea/member/LoginProc.do
-      id_field: userId
-      pw_field: userPw
-      id_env: KPEA_ID
-      pw_env: KPEA_PW
-      success_marker: 로그아웃
+    min_cells: 6
+    columns:
+      qualification: 2
+      company: 3
+      location: 4
+      deadline: 5
+      posted: 6
 
   - id: itpe
     name: 한국정보통신기술사회 채용/구인

@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from src import http  # noqa: E402
 from src.collectors.generic_board import collect as board_collect  # noqa: E402
 from src.collectors.portal_search import collect as portal_collect  # noqa: E402
+from src.collectors.row_board import collect as row_collect  # noqa: E402
 from src.filters import KeywordMatcher, parse_date  # noqa: E402
 from src.main import dedupe  # noqa: E402
 from src.models import Posting  # noqa: E402
@@ -483,12 +484,63 @@ def test_diagnose_runs_without_crashing():
     print("  ✓ 진단 도구: 로그인 폼·공백 표기 탐지 정상 (예외 없음)")
 
 
+# 한국기술사회 구인게시판의 실제 구조(--diagnose kpea로 확인).
+# 제목 컬럼이 없고 셀에 정보가 나뉘어 있어, 앵커 텍스트를 제목으로 읽는
+# 방식으로는 통째로 놓친다. 실측에서 HTML에 '정보통신기술사'가 있는데도
+# 0건 수집이었던 원인이다.
+KPEA_HTML = """<html><body><table><tbody>
+<tr><th>번호</th><th>구분</th><th>모집자격</th><th>회사</th><th>지역</th><th>마감일</th><th>등록일</th><th>조회</th></tr>
+<tr><td>5410</td><td>경력</td><td>정보통신기술사</td><td>(주)케이씨에이</td><td>서울</td><td>2026-10-30</td><td>2026-09-15</td><td>28</td></tr>
+<tr><td>5409</td><td>경력</td><td>전기응용기술사 건축전기설비기술사 전기철도기술사 전자응용기술사 발송배전기술사</td><td>성원기술개발(주)</td><td>전북</td><td>상시채용</td><td>2026-09-14</td><td>101</td></tr>
+<tr><td>5408</td><td>경력</td><td>토질및기초기술사 토목시공기술사</td><td>주식회사 세종</td><td>경기</td><td>2026-10-01</td><td>2026-09-14</td><td>55</td></tr>
+<tr><td>5407</td><td>경력</td><td>농어업토목기술사 건축구조기술사</td><td>(주)신화엔지니어링</td><td>경기</td><td>충원시까지</td><td>2026-09-15</td><td>13</td></tr>
+</tbody></table></body></html>"""
+
+
+def test_row_board_reads_table_columns():
+    """회귀: 표 형식 구인게시판을 통째로 놓쳤다(한국기술사회 실측 0건)."""
+    kpea = [s for s in CONFIG["sources"] if s["id"] == "kpea"][0]
+    assert kpea["type"] == "row_board", kpea["type"]
+
+    class Resp:
+        text = KPEA_HTML
+
+    import src.collectors.row_board as rb
+    orig_get, orig_login = rb.http.get, rb.http.login
+    rb.http.get = lambda *a, **k: Resp()
+    rb.http.login = lambda *a, **k: None
+    try:
+        posts, scanned = row_collect(kpea, CONFIG, KeywordMatcher(KEYWORDS))
+    finally:
+        rb.http.get, rb.http.login = orig_get, orig_login
+
+    assert scanned == 5, scanned
+    assert len(posts) == 2, [p.title for p in posts]
+
+    ict = posts[0]
+    assert ict.matched == ["정보통신기술사"]
+    assert ict.company == "(주)케이씨에이"
+    assert ict.location == "서울"
+    assert ict.deadline == "2026-10-30"
+    assert ict.posted_on == date(2026, 9, 15)
+
+    # 여러 자격이 나열된 행에서도 보유 자격만 태그된다
+    multi = posts[1]
+    assert multi.matched == ["전자응용기술사"], multi.matched
+    assert multi.company == "성원기술개발(주)"
+
+    # 토목·건축만 구하는 행은 배제
+    assert not any("토목" in p.title and not p.matched for p in posts)
+    print("  ✓ 표 게시판: 셀에서 자격·회사·지역·마감일 추출, 타 분야 배제")
+
+
 if __name__ == "__main__":
     print("기술사 채용 다이제스트 — 파이프라인 테스트\n")
     test_all_three_qualifications_configured()
     test_only_qualifications_are_matched()
     test_spacing_variants_match()
     test_board_collection()
+    test_row_board_reads_table_columns()
     test_portal_search_filters_padding()
     test_detail_verification_catches_body_only_mentions()
     test_detail_fetch_budget_is_respected()
