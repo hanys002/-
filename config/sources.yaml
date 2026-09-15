@@ -108,8 +108,11 @@ sources:
     #                     - 구인게시판        menu('sub4_4')  ← 이것
     # 게시판 코드를 또 추측하지 않는다. 로그인한 브라우저가 메뉴를 눌러
     # 실제로 도착한 곳을 쓴다.
-    url: https://itpe.or.kr/main/ko/index.html
-    eval_js: "menu('sub4_4')"
+    # 주소는 로그인한 브라우저가 menu('sub4_4')로 실제 도착한 곳이다.
+    #   최종 위치  …/index.php?code=bbs_sb0404&xid=4
+    #   실측       bbsView.php 링크 20개, '정보통신기술사' 15회
+    #              (자유게시판 sb0701은 4회뿐이었다 — 전부 머리글이었다)
+    url: https://itpe.or.kr/modules/bbs/index.php?code=bbs_sb0404&xid=4
     base: https://itpe.or.kr/modules/bbs/
     enabled: true
     render: true
@@ -215,6 +218,9 @@ sources:
     type: html_board
     # 홈페이지를 긁고 있었다. 실측에서 자격 0회에 78행이 전부 메뉴였다.
     # 구인구직 게시판은 '회원공간' 아래 따로 있다(내비에서 확보한 주소).
+    # 다만 이 게시판은 회원 전용이다 — 비로그인으로 열면 <title>이
+    # '로그인 - (사)한국정보공학기술사회'로 내려온다(실측). 계정을 넣기
+    # 전까지는 0건이 정상이다. 넣으려면 아래 login 블록을 살리면 된다.
     url: https://kapie.or.kr/%ea%b5%ac%ec%9d%b8%ea%b5%ac%ec%a7%81/
     base: https://kapie.or.kr/
     enabled: true
