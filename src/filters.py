@@ -52,34 +52,32 @@ def parse_date(text: str, today: date | None = None) -> date | None:
 
 
 class KeywordMatcher:
-    """보유 자격 3종(정보통신·산업계측제어·전자응용 기술사)에 한정해 선별한다.
+    """보유 자격증명이 제목·본문에 직접 적힌 공고만 채택한다.
 
-    판정 순서
-      1. exclude   — 채용이 아닌 글(학원 광고 등)이면 즉시 탈락
-      2. primary   — 자격증명이 직접 적혔으면 채택.
-                     타 분야 기술사가 함께 적혀 있어도 버리지 않는다.
-      3. other_fields — primary가 없는데 타 분야 기술사가 보이면 탈락
-      4. role AND domain — 기술사급 직무 + 해당 분야가 둘 다 있어야 채택
+    판정
+      1. exclude        — 채용이 아닌 글(학원 광고)·마감 공고면 탈락
+      2. hiring_signals — 게시판 목록에서 메뉴·뉴스를 걸러내기 위한 채용 신호어
+      3. qualifications — 자격증명이 직접 적혀 있어야 채택
 
-    role만으로 채택하면 맨 '기술사'에 토목·건축·전기 공고가 전부 걸린다.
-    domain에 '엔지니어링/설계' 같은 범용어를 넣어도 같은 결과가 되므로,
-    domain은 반드시 3개 자격의 분야로만 유지할 것.
+    이전에는 직무·등급 표현(감리원·선임자·중급·특급·기술자)을 분야 한정어와
+    조합해 채택했으나, 그 방식은 자격과 무관한 공고를 대량으로 통과시켰다.
+    '정보통신감리원 모집'은 기술사를 요구하지 않는 자리다. 자격증명이
+    적히지 않은 공고는 채택하지 않는다.
+
+    normalize()가 공백·특수문자를 제거하므로 '정보통신 기술사'처럼 띄어 쓴
+    표기도 '정보통신기술사'로 매칭된다.
     """
 
     def __init__(self, cfg: dict):
-        self.primary = cfg.get("primary", [])
-        self.role = cfg.get("role", [])
-        self.domain = cfg.get("domain", [])
-        self.other_fields = cfg.get("other_fields", [])
-        self.exclude = cfg.get("exclude", [])
+        self.qualifications = cfg.get("qualifications", [])
         self.hiring_signals = cfg.get("hiring_signals", [])
+        self.exclude = cfg.get("exclude", [])
 
     def has_hiring_signal(self, title: str) -> bool:
         """제목에 채용 의사 표현이 있는지. 게시판 목록 전용 판정.
 
-        협회 사이트를 통째로 훑으면 카테고리 메뉴('전기·전자·정보기술')와
-        뉴스 기사('정보공학기술사회 정기총회 개최')가 함께 걸린다. 이들은
-        키워드는 맞지만 채용 신호어가 없다는 점에서 공고와 구별된다.
+        협회 사이트를 통째로 훑으면 카테고리 메뉴와 뉴스 기사가 함께 걸린다.
+        이들은 자격증명이 적혀 있어도 채용 신호어가 없다는 점에서 구별된다.
         """
         if not self.hiring_signals:
             return True
@@ -87,34 +85,16 @@ class KeywordMatcher:
         return any(normalize(sig) in blob for sig in self.hiring_signals)
 
     def is_excluded(self, *texts: str) -> bool:
-        """채용이 아닌 글인지만 판정한다.
-
-        포털 검색 결과처럼 이미 키워드로 걸러진 목록에 쓴다. 포털은 자격요건
-        본문까지 검색하므로 제목만 다시 검사하면 정당한 공고를 대부분 버린다.
-        """
+        """채용이 아닌 글이거나 이미 끝난 공고인지."""
         blob = normalize(" ".join(t for t in texts if t))
         return any(normalize(bad) in blob for bad in self.exclude)
 
     def match(self, *texts: str) -> list[str]:
-        """적합하면 매칭된 키워드 목록, 아니면 빈 리스트."""
+        """적힌 자격증명 목록. 하나도 없으면 빈 리스트."""
         blob = normalize(" ".join(t for t in texts if t))
-        if not blob:
+        if not blob or self.is_excluded(*texts):
             return []
-
-        if any(normalize(bad) in blob for bad in self.exclude):
-            return []
-
-        hits = [kw for kw in self.primary if normalize(kw) in blob]
-        if hits:
-            return hits
-
-        if any(normalize(other) in blob for other in self.other_fields):
-            return []
-
-        roles = [kw for kw in self.role if normalize(kw) in blob]
-        if roles and any(normalize(d) in blob for d in self.domain):
-            return roles
-        return []
+        return [q for q in self.qualifications if normalize(q) in blob]
 
 
 def parse_iso(value: str) -> date | None:
