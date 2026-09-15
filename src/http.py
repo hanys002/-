@@ -16,6 +16,12 @@ UA = (
     "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
 )
 
+# 로그인 응답에 이 문구가 있으면 실패로 본다.
+LOGIN_FAILURE_MARKERS = [
+    "비밀번호", "일치하지", "존재하지 않", "등록되지 않", "확인하", "실패",
+    "다시 시도", "incorrect", "invalid",
+]
+
 _last_call: dict[str, float] = {}
 
 
@@ -137,11 +143,33 @@ def login(cfg: dict, source_id: str) -> requests.Session | None:
         log.warning("[%s] 로그인 요청 실패(%s) — 비로그인으로 진행", source_id, exc)
         return None
 
+    # 성공 판정. 사이트마다 응답이 달라 한 가지 기준으로는 부족하므로
+    # 실패 문구 → 성공 표식 → 세션 쿠키 순으로 본다.
+    body = resp.text
+    failures = [m for m in LOGIN_FAILURE_MARKERS if m in body]
     marker = cfg.get("success_marker", "로그아웃")
-    if marker and marker not in resp.text:
-        log.warning("[%s] 로그인 실패로 보임 — '%s'를 찾지 못함. 비로그인으로 진행",
-                    source_id, marker)
+    cookies = [c.name for c in session.cookies]
+
+    log.info("[%s] 로그인 응답: HTTP %s, %s bytes, 쿠키 %s",
+             source_id, resp.status_code, len(body), cookies or "없음")
+    if len(body) < 600:
+        # 로그인 처리 페이지는 보통 짧은 스크립트만 돌려준다. 그대로 보여준다.
+        log.info("[%s] 응답 본문: %s", source_id, " ".join(body.split())[:300])
+
+    if failures:
+        log.warning("[%s] 로그인 실패 — 응답에 %s 포함. 아이디·비밀번호를 확인하세요",
+                    source_id, failures[:2])
         return None
 
-    log.info("[%s] 로그인 성공", source_id)
-    return session
+    if marker and marker in body:
+        log.info("[%s] 로그인 성공 ('%s' 확인)", source_id, marker)
+        return session
+
+    if cookies:
+        # 성공 표식이 없어도 세션 쿠키가 생겼으면 진행해 본다.
+        # 실제 성공 여부는 수집 단계의 스캔 건수로 드러난다.
+        log.info("[%s] 로그인 표식은 없으나 세션 쿠키 발급됨 — 진행", source_id)
+        return session
+
+    log.warning("[%s] 로그인 성공을 확인할 수 없음 — 비로그인으로 진행", source_id)
+    return None
