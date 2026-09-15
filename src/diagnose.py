@@ -79,9 +79,11 @@ def run(cfg: dict, settings: dict, qualifications: list[str], session=None) -> N
             around = text[max(0, hits[0] - 60):hits[0] + 80].replace("\n", " ")
             log.info("'%s' %d회 발견 → …%s…", q, len(hits), around)
         else:
-            # 공백을 넣어 쓰는 표기도 확인
-            loose = re.sub(r"(.)", r"\\1\\s*", q)
-            log.info("'%s' 0회 (느슨한 매칭 %d회)", q, len(re.findall(loose, text)))
+            # '정보통신 기술사'처럼 공백을 넣어 쓴 표기도 확인한다.
+            loose = r"\s*".join(re.escape(ch) for ch in q)
+            found = re.findall(loose, text)
+            log.info("'%s' 0회 (공백 허용 매칭 %d회%s)", q, len(found),
+                     f" 예: {found[0]!r}" if found else "")
 
     log.info("링크 상위 %d개:", 25)
     for t, h in _summarize_links(soup):

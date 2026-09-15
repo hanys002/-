@@ -94,10 +94,15 @@ def main(argv: list[str] | None = None) -> int:
             log.error("소스 '%s'를 찾을 수 없습니다. 가능한 값: %s",
                       args.diagnose, ", ".join(s["id"] for s in cfg["sources"]))
             return 1
+        failed = 0
         for source in targets:
-            diagnose.run(source, cfg, cfg["keywords"]["qualifications"],
-                         session=http.login(source.get("login"), source["id"]))
-        return 0
+            try:
+                diagnose.run(source, cfg, cfg["keywords"]["qualifications"],
+                             session=http.login(source.get("login"), source["id"]))
+            except Exception:  # noqa: BLE001 - 진단 도구 버그로 나머지를 못 보면 곤란하다
+                log.exception("[%s] 진단 중 오류", source["id"])
+                failed += 1
+        return 1 if failed == len(targets) else 0
 
     postings, results = collect_all(cfg, matcher)
     postings = dedupe(postings)

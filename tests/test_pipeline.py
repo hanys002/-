@@ -458,6 +458,31 @@ def test_login_credentials_are_never_in_config():
     print("  ✓ 로그인 자격정보: 설정 파일에 평문 없음 (시크릿 참조만)")
 
 
+def test_diagnose_runs_without_crashing():
+    """회귀: 느슨한 매칭 패턴에 역참조(\\1)가 섞여 re.error로 실행이 죽었다."""
+    from src import diagnose
+
+    html = """<html><head><title>구인정보</title></head><body>
+      <form action="/login"><input name="userId"><input name="userPw"></form>
+      <table><tr><td><a href="/view.do?id=1">정보통신 기술사 모십니다</a></td></tr></table>
+      <a href="/kpis">기술사종합정보시스템</a>
+    </body></html>"""
+
+    class Resp:
+        status_code = 200
+        encoding = "utf-8"
+        text = html
+
+    original, diagnose.http.get = diagnose.http.get, lambda *a, **k: Resp()
+    try:
+        # 자격증명이 '있는 경우'와 '없는 경우'(공백 허용 매칭 경로) 모두 통과해야 한다
+        diagnose.run(dict(CFG, id="kpea"), SETTINGS,
+                     ["정보통신기술사", "전자응용기술사"])
+    finally:
+        diagnose.http.get = original
+    print("  ✓ 진단 도구: 로그인 폼·공백 표기 탐지 정상 (예외 없음)")
+
+
 if __name__ == "__main__":
     print("기술사 채용 다이제스트 — 파이프라인 테스트\n")
     test_all_three_qualifications_configured()
@@ -470,6 +495,7 @@ if __name__ == "__main__":
     test_every_source_has_a_registered_collector()
     test_recency_window_is_one_year()
     test_login_credentials_are_never_in_config()
+    test_diagnose_runs_without_crashing()
     test_portal_queries_cover_all_qualifications()
     test_navigation_and_news_are_not_postings()
     test_unusable_links_fall_back_to_board_url()
