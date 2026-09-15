@@ -18,10 +18,30 @@ TODAY = date(2026, 9, 15)
 
 KEYWORDS = {
     "primary": ["정보통신기술사", "산업계측제어기술사", "전자응용기술사"],
-    "secondary": ["기술사", "수석감리원", "감리원"],
-    "context": ["정보통신", "계측", "제어", "전자"],
+    "role": ["기술사", "수석감리원", "특급감리원", "감리원"],
+    "domain": ["정보통신", "통신설비", "계측제어", "자동제어", "계장", "전자응용"],
+    "other_fields": ["건축기술사", "토목기술사", "전기기술사", "소방기술사"],
     "exclude": ["수강생", "개강", "기출문제"],
 }
+
+# 사용자 제보: 받은 메일에 보유 자격과 무관한 '기술사' 공고가 섞여 있었다.
+# 아래는 그때 통과했던 실제 유형들 — 전부 탈락해야 한다.
+OFF_TARGET = [
+    ("토목 기술사 설계 PM 모집", "대한토목"),
+    ("건축기술사 현장소장 채용", "무관건설"),
+    ("전기기술사 우대 - 수배전 설계", "한빛전력"),
+    ("소방기술사 감리원 모집", "안전소방"),
+    ("기술사 자격 우대 엔지니어링 경력직", "종합엔지니어링"),
+]
+
+# 반대로 이건 반드시 채택돼야 한다 (보유 3종 관련)
+ON_TARGET = [
+    ("정보통신기술사 감리원 모집", "가나기술단"),
+    ("정보통신 특급감리원 채용", "디에이치기술단"),
+    ("플랜트 계장 기술사 모집", "대한엔지니어링"),
+    ("전기·정보통신기술사 동시 모집", "복합기술단"),   # 타 분야 병기여도 채택
+    ("자동제어 기술사 우대", "오토메이션"),
+]
 
 BOARD_HTML = """
 <html><body><table><tbody>
@@ -163,6 +183,24 @@ def test_portal_policy_is_exclude_only():
     print("  ✓ 포털 필터 정책: 검색 신뢰 + 제외 대상만 차단")
 
 
+def test_off_target_technical_grades_are_rejected():
+    """사용자 제보 회귀: 보유 자격과 무관한 분야 기술사 공고가 섞여 나왔다."""
+    m = KeywordMatcher(KEYWORDS)
+    for title, company in OFF_TARGET:
+        assert not m.match(title, company), f"오탐 통과: {title}"
+    print("  ✓ 타 분야 기술사 배제:", len(OFF_TARGET), "유형 전부 탈락")
+
+
+def test_on_target_postings_are_kept():
+    """3종 자격 관련 공고는 표현이 달라도 채택돼야 한다."""
+    m = KeywordMatcher(KEYWORDS)
+    for title, company in ON_TARGET:
+        assert m.match(title, company), f"누락: {title}"
+    # 타 분야가 병기돼도 본인 자격이 명시되면 살린다
+    assert m.match("전기·정보통신기술사 동시 모집") == ["정보통신기술사"]
+    print("  ✓ 보유 자격 공고 채택:", len(ON_TARGET), "유형 전부 통과")
+
+
 if __name__ == "__main__":
     http.get = lambda *a, **k: FakeResponse()          # 네트워크 차단 환경용 스텁
     import src.collectors.generic_board as gb
@@ -178,4 +216,6 @@ if __name__ == "__main__":
     test_fallback_runs_when_rows_matched_but_nothing_adopted(None)
     test_gamriwon_titles_are_matched()
     test_portal_policy_is_exclude_only()
+    test_off_target_technical_grades_are_rejected()
+    test_on_target_postings_are_kept()
     print("\n전체 통과 ✅")

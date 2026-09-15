@@ -52,16 +52,29 @@ def parse_date(text: str, today: date | None = None) -> date | None:
 
 
 class KeywordMatcher:
-    """primary는 단독 채택, secondary는 context 동반 시 채택, exclude는 즉시 탈락."""
+    """보유 자격 3종(정보통신·산업계측제어·전자응용 기술사)에 한정해 선별한다.
+
+    판정 순서
+      1. exclude   — 채용이 아닌 글(학원 광고 등)이면 즉시 탈락
+      2. primary   — 자격증명이 직접 적혔으면 채택.
+                     타 분야 기술사가 함께 적혀 있어도 버리지 않는다.
+      3. other_fields — primary가 없는데 타 분야 기술사가 보이면 탈락
+      4. role AND domain — 기술사급 직무 + 해당 분야가 둘 다 있어야 채택
+
+    role만으로 채택하면 맨 '기술사'에 토목·건축·전기 공고가 전부 걸린다.
+    domain에 '엔지니어링/설계' 같은 범용어를 넣어도 같은 결과가 되므로,
+    domain은 반드시 3개 자격의 분야로만 유지할 것.
+    """
 
     def __init__(self, cfg: dict):
         self.primary = cfg.get("primary", [])
-        self.secondary = cfg.get("secondary", [])
-        self.context = cfg.get("context", [])
+        self.role = cfg.get("role", [])
+        self.domain = cfg.get("domain", [])
+        self.other_fields = cfg.get("other_fields", [])
         self.exclude = cfg.get("exclude", [])
 
     def is_excluded(self, *texts: str) -> bool:
-        """채용이 아닌 글(학원 수강생 모집 등)인지만 판정한다.
+        """채용이 아닌 글인지만 판정한다.
 
         포털 검색 결과처럼 이미 키워드로 걸러진 목록에 쓴다. 포털은 자격요건
         본문까지 검색하므로 제목만 다시 검사하면 정당한 공고를 대부분 버린다.
@@ -82,9 +95,12 @@ class KeywordMatcher:
         if hits:
             return hits
 
-        soft = [kw for kw in self.secondary if normalize(kw) in blob]
-        if soft and any(normalize(c) in blob for c in self.context):
-            return soft
+        if any(normalize(other) in blob for other in self.other_fields):
+            return []
+
+        roles = [kw for kw in self.role if normalize(kw) in blob]
+        if roles and any(normalize(d) in blob for d in self.domain):
+            return roles
         return []
 
 
