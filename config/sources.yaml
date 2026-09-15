@@ -245,9 +245,10 @@ sources:
     org: 인크루트
     type: portal_search
     # 인크루트는 자격증 기준 색인을 제공해 기술사급 공고 적중률이 높다.
+    # job.incruit.com은 러너에서 ConnectTimeout이 재현돼 모바일 호스트를 쓴다.
     enabled: true
-    search_url: https://job.incruit.com/jobdb_list/searchjob.asp
-    base: https://job.incruit.com
+    search_url: https://m.incruit.com/jobdb_list/searchjob.asp
+    base: https://m.incruit.com
     query_param: kw
     detail_hints: ["/jobdb_info/jobpost.asp", "/entrjob/"]
     max_items: 20
