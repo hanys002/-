@@ -100,8 +100,10 @@ sources:
     name: 한국정보통신기술사회 채용/구인
     org: 한국정보통신기술사회(ITPE)
     type: html_board
-    url: https://www.itpe.or.kr/
-    base: https://www.itpe.or.kr
+    # www.itpe.or.kr/ 는 67바이트 리다이렉트 스텁이라 내용이 없다(진단으로 확인).
+    # 실제 사이트는 /main/ko/ 아래에 있다. 구인 게시판 경로는 진단으로 찾는다.
+    url: https://itpe.or.kr/main/ko/index.html
+    base: https://itpe.or.kr/main/ko/
     enabled: true
     login:
       url: https://www.itpe.or.kr/member/loginProc

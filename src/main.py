@@ -76,8 +76,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--no-state", action="store_true",
                         help="NEW 배지 상태파일을 읽거나 쓰지 않음")
     parser.add_argument("--diagnose", metavar="SOURCE_ID",
-                        help="해당 소스가 실제로 받아오는 HTML을 진단 출력하고 종료 "
-                             "(all 이면 전체). 선택자·로그인 문제 파악용")
+                        help="해당 소스가 실제로 받아오는 HTML을 진단 출력하고 종료. "
+                             "쉼표로 여러 개 지정 가능, all 이면 전체. "
+                             "선택자·로그인 문제 파악용")
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO,
@@ -88,8 +89,9 @@ def main(argv: list[str] | None = None) -> int:
     today = date.today()
 
     if args.diagnose:
+        wanted = {x.strip() for x in args.diagnose.split(",") if x.strip()}
         targets = [s for s in cfg["sources"]
-                   if args.diagnose == "all" or s["id"] == args.diagnose]
+                   if args.diagnose == "all" or s["id"] in wanted]
         if not targets:
             log.error("소스 '%s'를 찾을 수 없습니다. 가능한 값: %s",
                       args.diagnose, ", ".join(s["id"] for s in cfg["sources"]))
