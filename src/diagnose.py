@@ -100,6 +100,18 @@ def run(cfg: dict, settings: dict, qualifications: list[str], session=None) -> N
              len(soup.select(cfg["row_selector"])) if cfg.get("row_selector") else "-",
              ", ".join(found_summary) or "없음", url)
 
+    # JS로 이동하는 사이트는 링크에 주소가 없다(javascript:menu(...)).
+    # 다음 단서는 스크립트·iframe·폼에 있다.
+    scripts = [t.get("src") for t in soup.find_all("script") if t.get("src")]
+    frames = [t.get("src") for t in soup.find_all(["iframe", "frame"]) if t.get("src")]
+    actions = [t.get("action") for t in soup.find_all("form") if t.get("action")]
+    if scripts:
+        log.info("스크립트 %d개: %s", len(scripts), ", ".join(scripts[:8]))
+    if frames:
+        log.info("프레임: %s", ", ".join(frames[:5]))
+    if actions:
+        log.info("폼 action: %s", ", ".join(actions[:5]))
+
     log.info("링크 상위 %d개:", 10)
     for t, h in _summarize_links(soup):
         log.info("    %-70s %s", t, h)
