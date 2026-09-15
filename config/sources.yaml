@@ -102,19 +102,23 @@ sources:
     type: html_board
     # www.itpe.or.kr/ 는 67바이트 리다이렉트 스텁이라 내용이 없다(진단으로 확인).
     # 실제 사이트는 /main/ko/ 아래에 있다. 구인 게시판 경로는 진단으로 찾는다.
-    # 구인 게시판은 회원 전용이다(진단: sub04_02.html이
-    # "회원님은 접근 권한이 없습니다" 스크립트만 반환).
-    # ITPE_ID/ITPE_PW 시크릿이 있어야 목록이 보인다.
-    url: https://itpe.or.kr/main/ko/sub07_01.html
+    # 구인 게시판은 회원 전용이고, 주소를 추정으로 맞힐 수 없다.
+    #   sub04_02.html → 실재하나 "회원님은 접근 권한이 없습니다"
+    #   sub07_01~03.html → 전부 404 (메뉴번호와 파일번호가 1:1이 아니다)
+    # 그래서 메인 페이지에서 로그인한 뒤 열린공간 메뉴를 실제로 클릭한다.
+    # 이동한 주소는 로그의 '최종 위치'에 찍히므로 그걸 보고 확정하면 된다.
+    url: https://itpe.or.kr/main/ko/index.html
     base: https://itpe.or.kr/main/ko/
-    # eval_js는 쓰지 않는다. sub07_01.html을 직접 열므로 menu() 함수가 없고,
-    # 호출하면 ReferenceError로 수집 전체가 실패한다(실측).
     render: true
+    eval_js: "menu('sub7_1')"
     enabled: true
     # 로그인 폼 필드명은 브라우저 렌더링 진단으로 확인한 실제 값이다.
     # (추정값 userId/userPw는 틀렸다)
     login:
       url: https://itpe.or.kr/modules/member/memberProcess.php
+      # form_url이 있으면 브라우저가 이 페이지에서 폼을 채워 로그인한다.
+      # 로그인 후 JS 메뉴를 그대로 클릭할 수 있어 주소를 몰라도 된다.
+      form_url: https://itpe.or.kr/main/ko/index.html
       id_field: userID
       pw_field: password
       id_env: ITPE_ID

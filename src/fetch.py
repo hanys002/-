@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import os
 
 from . import browser, http
 
@@ -25,5 +26,25 @@ def page_html(cfg: dict, settings: dict, session=None) -> str:
         url,
         wait_for=cfg.get("wait_for"),
         eval_js=cfg.get("eval_js"),
+        login=_browser_login(cfg),
         timeout_ms=settings.get("render_timeout_ms", browser.DEFAULT_TIMEOUT_MS),
     )
+
+
+def _browser_login(cfg: dict) -> dict | None:
+    """브라우저 로그인에 쓸 자격정보. 환경변수(=시크릿)에서만 읽는다."""
+    login = cfg.get("login")
+    if not login or not login.get("form_url"):
+        return None
+    user = os.environ.get(login.get("id_env", ""), "").strip()
+    password = os.environ.get(login.get("pw_env", ""), "").strip()
+    if not user or not password:
+        log.info("[%s] 브라우저 로그인 자격정보 없음", cfg.get("id", "?"))
+        return None
+    return {
+        "url": login["form_url"],
+        "id_field": login.get("id_field", "userID"),
+        "pw_field": login.get("pw_field", "password"),
+        "user": user,
+        "password": password,
+    }

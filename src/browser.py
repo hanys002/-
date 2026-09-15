@@ -24,7 +24,31 @@ class BrowserUnavailable(RuntimeError):
     """Playwright 미설치 등으로 렌더링할 수 없음."""
 
 
+def _do_login(page, login: dict, timeout_ms: int) -> None:
+    """브라우저에서 로그인 폼을 채우고 제출한다.
+
+    requests 세션 로그인과 달리, 로그인 후 JS 메뉴를 그대로 클릭할 수 있다.
+    회원 전용 게시판의 실제 주소를 모를 때 이 경로가 유일한 방법이다.
+    """
+    page.goto(login["url"], wait_until="domcontentloaded", timeout=timeout_ms)
+    id_sel = f'input[name="{login["id_field"]}"]'
+    pw_sel = f'input[name="{login["pw_field"]}"]'
+    try:
+        page.fill(id_sel, login["user"])
+        page.fill(pw_sel, login["password"])
+        page.press(pw_sel, "Enter")
+    except Exception as exc:  # noqa: BLE001
+        log.warning("로그인 폼 입력 실패(%s) — 비로그인으로 진행", exc)
+        return
+    try:
+        page.wait_for_load_state("networkidle", timeout=10000)
+    except Exception:  # noqa: BLE001
+        pass
+    log.info("로그인 시도 후 위치: %s", page.url)
+
+
 def render(url: str, *, wait_for: str | None = None, eval_js: str | None = None,
+           login: dict | None = None,
            timeout_ms: int = DEFAULT_TIMEOUT_MS) -> str:
     """페이지를 렌더링해 최종 HTML을 돌려준다.
 
@@ -43,6 +67,10 @@ def render(url: str, *, wait_for: str | None = None, eval_js: str | None = None,
             page = browser.new_page(user_agent=UA, locale="ko-KR",
                                     viewport={"width": 1280, "height": 900})
             page.set_default_timeout(timeout_ms)
+
+            if login:
+                _do_login(page, login, timeout_ms)
+
             page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
 
             if eval_js:
@@ -61,6 +89,8 @@ def render(url: str, *, wait_for: str | None = None, eval_js: str | None = None,
                 except Exception:  # noqa: BLE001
                     log.warning("대기 선택자 '%s' 미출현 — 현재 상태로 진행", wait_for)
 
+            # JS로 이동하는 사이트는 이 최종 주소가 게시판의 실제 URL이다.
+            log.info("최종 위치: %s", page.url)
             return page.content()
         finally:
             browser.close()
