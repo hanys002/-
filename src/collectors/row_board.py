@@ -19,7 +19,7 @@ from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup
 
-from .. import http
+from .. import fetch, http
 from ..filters import KeywordMatcher, parse_date
 from ..models import Posting
 
@@ -48,13 +48,7 @@ def _pick(cells: list[str], index: int | None, pattern: re.Pattern | None) -> st
 
 def collect(cfg: dict, settings: dict, matcher: KeywordMatcher) -> tuple[list[Posting], int]:
     session = http.login(cfg.get("login"), cfg["id"])
-    resp = http.get(
-        cfg["url"],
-        timeout=settings.get("request_timeout", 25),
-        delay=settings.get("request_delay", 1.2),
-        session=session,
-    )
-    soup = BeautifulSoup(resp.text, "lxml")
+    soup = BeautifulSoup(fetch.page_html(cfg, settings, session), "lxml")
     cols = cfg.get("columns") or {}
     limit = cfg.get("max_items", settings.get("max_items_per_source", 100))
 

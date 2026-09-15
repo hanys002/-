@@ -78,6 +78,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--probe", metavar="URL",
                         help="설정에 없는 임의 URL을 진단한다(쉼표로 여러 개). "
                              "JS 메뉴·AJAX 게시판의 실제 주소를 찾을 때 쓴다")
+    parser.add_argument("--render", action="store_true",
+                        help="--probe를 브라우저로 렌더링해서 진단 "
+                             "(JS 메뉴·AJAX 게시판용)")
+    parser.add_argument("--eval-js", metavar="JS",
+                        help="렌더링 후 실행할 JS. 예: menu('sub7_1')")
+    parser.add_argument("--wait-for", metavar="SELECTOR",
+                        help="이 선택자가 나타날 때까지 대기")
     parser.add_argument("--diagnose", metavar="SOURCE_ID",
                         help="해당 소스가 실제로 받아오는 HTML을 진단 출력하고 종료. "
                              "쉼표로 여러 개 지정 가능, all 이면 전체. "
@@ -95,7 +102,9 @@ def main(argv: list[str] | None = None) -> int:
         quals = cfg["keywords"]["qualifications"]
         for url in [u.strip() for u in args.probe.split(",") if u.strip()]:
             try:
-                diagnose.run({"id": "probe", "name": "임의 URL", "url": url},
+                diagnose.run({"id": "probe", "name": "임의 URL", "url": url,
+                              "render": args.render, "eval_js": args.eval_js,
+                              "wait_for": args.wait_for},
                              cfg, quals)
             except Exception:  # noqa: BLE001
                 log.exception("probe 실패: %s", url)

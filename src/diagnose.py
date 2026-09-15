@@ -12,7 +12,7 @@ import re
 
 from bs4 import BeautifulSoup
 
-from . import http
+from . import fetch
 
 log = logging.getLogger("diagnose")
 
@@ -38,19 +38,19 @@ def run(cfg: dict, settings: dict, qualifications: list[str], session=None) -> N
     log.info("진단: [%s] %s", cfg["id"], cfg.get("name", ""))
     log.info("URL: %s", url)
 
+    if cfg.get("render"):
+        log.info("모드: 브라우저 렌더링 (eval_js=%s, wait_for=%s)",
+                 cfg.get("eval_js"), cfg.get("wait_for"))
     try:
-        resp = http.get(url, timeout=settings.get("request_timeout", 25),
-                        delay=settings.get("request_delay", 1.2), session=session)
+        body = fetch.page_html(cfg, settings, session)
     except Exception as exc:  # noqa: BLE001
         log.error("요청 실패: %s: %s", type(exc).__name__, exc)
         return
-
-    body = resp.text
     soup = BeautifulSoup(body, "lxml")
     text = soup.get_text(" ", strip=True)
 
-    log.info("HTTP %s | %s bytes | encoding=%s", resp.status_code, len(body), resp.encoding)
-    log.info("최종 URL: %s", getattr(resp, "url", url))   # 리다이렉트 추적 결과
+    log.info("본문 %s bytes | %s", len(body),
+             "브라우저 렌더링" if cfg.get("render") else "정적 요청")
     if len(body) < 2000:
         # 응답이 작으면 JS 리다이렉트·프레임·차단 안내인 경우가 많다.
         # 구조 분석이 무의미하므로 원문을 그대로 보여준다.
@@ -95,8 +95,8 @@ def run(cfg: dict, settings: dict, qualifications: list[str], session=None) -> N
                      f" 예: {found[0]!r}" if found else "")
 
     # 여러 후보를 한 번에 던질 때 이 한 줄만 훑으면 된다.
-    log.info("판정 ▶ [%s] HTTP %s | %sB | rows=%s | 자격: %s | %s",
-             cfg["id"], resp.status_code, len(body),
+    log.info("판정 ▶ [%s] %s | %sB | rows=%s | 자격: %s | %s",
+             cfg["id"], "렌더" if cfg.get("render") else "정적", len(body),
              len(soup.select(cfg["row_selector"])) if cfg.get("row_selector") else "-",
              ", ".join(found_summary) or "없음", url)
 

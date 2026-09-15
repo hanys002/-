@@ -16,7 +16,15 @@ on:
         type: string
         default: ''
       probe:
-        description: "임의 URL 진단 (쉼표 구분). JS 메뉴·AJAX 게시판의 실제 주소 찾기용"
+        description: "임의 URL 진단 (쉼표 구분)"
+        type: string
+        default: ''
+      render:
+        description: "probe를 브라우저로 렌더링 (JS 메뉴·AJAX 게시판)"
+        type: boolean
+        default: false
+      eval_js:
+        description: "렌더링 후 실행할 JS. 예: menu('sub7_1')"
         type: string
         default: ''
 
@@ -43,6 +51,10 @@ jobs:
       - name: 의존성 설치
         run: pip install -r requirements.txt
 
+      - name: 브라우저 설치
+        # JS 메뉴(정보통신기술사회)·AJAX 목록(대한기술사회)은 렌더링해야 읽힌다.
+        run: python -m playwright install --with-deps chromium
+
       - name: 파이프라인 테스트
         run: python tests/test_pipeline.py
 
@@ -62,7 +74,9 @@ jobs:
           GAMLI_PW: ${{ secrets.GAMLI_PW }}
         run: |
           if [ -n "${{ inputs.probe }}" ]; then
-            python -m src.main --probe "${{ inputs.probe }}"
+            python -m src.main --probe "${{ inputs.probe }}" \
+              ${{ inputs.render && '--render' || '' }} \
+              ${{ inputs.eval_js && format('--eval-js "{0}"', inputs.eval_js) || '' }}
           elif [ -n "${{ inputs.diagnose }}" ]; then
             python -m src.main --diagnose "${{ inputs.diagnose }}"
           else

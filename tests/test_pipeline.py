@@ -56,19 +56,16 @@ SETTINGS = {"max_items_per_source": 60, "request_timeout": 5, "request_delay": 0
 
 
 def with_html(html: str):
-    """http.get을 고정 응답으로 바꾸는 컨텍스트."""
-    class Resp:
-        text = html
-
+    """HTML 취득을 고정 응답으로 바꾸는 컨텍스트."""
     import src.collectors.generic_board as gb
 
     class Patch:
         def __enter__(self):
-            self.original = gb.http.get
-            gb.http.get = lambda *a, **k: Resp()
+            self.original = gb.fetch.page_html
+            gb.fetch.page_html = lambda *a, **k: html
 
         def __exit__(self, *exc):
-            gb.http.get = self.original
+            gb.fetch.page_html = self.original
 
     return Patch()
 
@@ -469,18 +466,14 @@ def test_diagnose_runs_without_crashing():
       <a href="/kpis">기술사종합정보시스템</a>
     </body></html>"""
 
-    class Resp:
-        status_code = 200
-        encoding = "utf-8"
-        text = html
-
-    original, diagnose.http.get = diagnose.http.get, lambda *a, **k: Resp()
+    original = diagnose.fetch.page_html
+    diagnose.fetch.page_html = lambda *a, **k: html
     try:
         # 자격증명이 '있는 경우'와 '없는 경우'(공백 허용 매칭 경로) 모두 통과해야 한다
         diagnose.run(dict(CFG, id="kpea"), SETTINGS,
                      ["정보통신기술사", "전자응용기술사"])
     finally:
-        diagnose.http.get = original
+        diagnose.fetch.page_html = original
     print("  ✓ 진단 도구: 로그인 폼·공백 표기 탐지 정상 (예외 없음)")
 
 
@@ -502,17 +495,14 @@ def test_row_board_reads_table_columns():
     kpea = [s for s in CONFIG["sources"] if s["id"] == "kpea"][0]
     assert kpea["type"] == "row_board", kpea["type"]
 
-    class Resp:
-        text = KPEA_HTML
-
     import src.collectors.row_board as rb
-    orig_get, orig_login = rb.http.get, rb.http.login
-    rb.http.get = lambda *a, **k: Resp()
+    orig_fetch, orig_login = rb.fetch.page_html, rb.http.login
+    rb.fetch.page_html = lambda *a, **k: KPEA_HTML
     rb.http.login = lambda *a, **k: None
     try:
         posts, scanned = row_collect(kpea, CONFIG, KeywordMatcher(KEYWORDS))
     finally:
-        rb.http.get, rb.http.login = orig_get, orig_login
+        rb.fetch.page_html, rb.http.login = orig_fetch, orig_login
 
     assert scanned == 5, scanned
     assert len(posts) == 2, [p.title for p in posts]
@@ -534,6 +524,57 @@ def test_row_board_reads_table_columns():
     print("  ✓ 표 게시판: 셀에서 자격·회사·지역·마감일 추출, 타 분야 배제")
 
 
+def test_fetch_uses_browser_only_when_render_is_set():
+    """render 플래그가 정적/브라우저 경로를 가른다.
+
+    브라우저는 느리고 무거우므로, 정적으로 읽히는 소스까지 렌더링하면 안 된다.
+    """
+    from src import browser, fetch, http
+
+    calls = {"static": 0, "render": 0}
+
+    class Resp:
+        text = "<html>static</html>"
+
+    orig_get, orig_render = http.get, browser.render
+    http.get = lambda *a, **k: (calls.__setitem__("static", calls["static"] + 1), Resp())[1]
+    browser.render = lambda *a, **k: (calls.__setitem__("render", calls["render"] + 1),
+                                      "<html>rendered</html>")[1]
+    try:
+        assert fetch.page_html({"id": "s", "url": "https://x"}, SETTINGS) == "<html>static</html>"
+        assert fetch.page_html({"id": "r", "url": "https://x", "render": True},
+                               SETTINGS) == "<html>rendered</html>"
+    finally:
+        http.get, browser.render = orig_get, orig_render
+
+    assert calls == {"static": 1, "render": 1}, calls
+    print("  ✓ 취득 경로: render 지정 시에만 브라우저 사용")
+
+
+def test_render_options_reach_the_browser():
+    """eval_js·wait_for가 브라우저까지 전달돼야 JS 메뉴 진입이 가능하다."""
+    from src import browser, fetch
+
+    seen = {}
+    orig = browser.render
+
+    def fake(url, **kwargs):
+        seen.update(kwargs, url=url)
+        return "<html>ok</html>"
+
+    browser.render = fake
+    try:
+        fetch.page_html({"id": "itpe", "url": "https://itpe.or.kr/main/ko/index.html",
+                         "render": True, "eval_js": "menu('sub7_1')",
+                         "wait_for": "table tbody tr"}, SETTINGS)
+    finally:
+        browser.render = orig
+
+    assert seen["eval_js"] == "menu('sub7_1')", seen
+    assert seen["wait_for"] == "table tbody tr", seen
+    print("  ✓ 렌더 옵션: eval_js·wait_for 전달 확인")
+
+
 if __name__ == "__main__":
     print("기술사 채용 다이제스트 — 파이프라인 테스트\n")
     test_all_three_qualifications_configured()
@@ -545,6 +586,8 @@ if __name__ == "__main__":
     test_detail_verification_catches_body_only_mentions()
     test_detail_fetch_budget_is_respected()
     test_every_source_has_a_registered_collector()
+    test_fetch_uses_browser_only_when_render_is_set()
+    test_render_options_reach_the_browser()
     test_recency_window_is_one_year()
     test_login_credentials_are_never_in_config()
     test_diagnose_runs_without_crashing()

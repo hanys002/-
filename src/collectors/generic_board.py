@@ -11,7 +11,7 @@ from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup
 
-from .. import http
+from .. import fetch, http
 from ..filters import KeywordMatcher, parse_date
 from ..models import Posting
 
@@ -84,13 +84,7 @@ def _make_posting(cfg, anchor, row, matcher: KeywordMatcher) -> Posting | None:
 
 def collect(cfg: dict, settings: dict, matcher: KeywordMatcher) -> tuple[list[Posting], int]:
     session = http.login(cfg.get("login"), cfg["id"])
-    resp = http.get(
-        cfg["url"],
-        timeout=settings.get("request_timeout", 25),
-        delay=settings.get("request_delay", 1.2),
-        session=session,
-    )
-    soup = BeautifulSoup(resp.text, "lxml")
+    soup = BeautifulSoup(fetch.page_html(cfg, settings, session), "lxml")
 
     rows = soup.select(cfg.get("row_selector", "")) if cfg.get("row_selector") else []
     postings: list[Posting] = []
