@@ -39,8 +39,10 @@ def _from_api(cfg, settings, matcher, key) -> tuple[list[Posting], int]:
             scanned += 1
             title = (job.get("position") or {}).get("title", "")
             company = ((job.get("company") or {}).get("detail") or {}).get("name", "")
-            matched = matcher.match(title, company,
-                                    ((job.get("position") or {}).get("job-code") or {}).get("name", ""))
+            matched = matcher.match(
+                title, company,
+                ((job.get("position") or {}).get("job-code") or {}).get("name", ""),
+            )
             if not matched:
                 continue
             out.append(Posting(
@@ -74,7 +76,7 @@ def _from_html(cfg, settings, matcher) -> tuple[list[Posting], int]:
             title = anchor.get("title") or anchor.get_text(" ", strip=True)
             corp = card.select_one(".corp_name a, .company_nm a")
             company = corp.get_text(" ", strip=True) if corp else ""
-            matched = matcher.match(title, company, query)
+            matched = matcher.match(title, company)
             if not matched:
                 continue
             date_el = card.select_one(".job_date, .date, .support_info")

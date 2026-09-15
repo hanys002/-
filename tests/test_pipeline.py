@@ -18,8 +18,8 @@ TODAY = date(2026, 9, 15)
 
 KEYWORDS = {
     "primary": ["정보통신기술사", "산업계측제어기술사", "전자응용기술사"],
-    "secondary": ["기술사", "수석감리원"],
-    "context": ["정보통신", "감리", "계측", "제어", "전자"],
+    "secondary": ["기술사", "수석감리원", "감리원"],
+    "context": ["정보통신", "계측", "제어", "전자"],
     "exclude": ["수강생", "개강", "기출문제"],
 }
 
@@ -119,6 +119,33 @@ def test_html_report_renders_links_and_escapes():
     print("  ✓ HTML 리포트: 링크/이스케이프/NEW 배지 정상")
 
 
+def test_search_query_does_not_bypass_filter():
+    """회귀: 검색어를 매처에 넘기면 모든 결과가 통과하던 버그 (run #1에서 61건 중 57건 오탐)."""
+    m = KeywordMatcher(KEYWORDS)
+    # 포털 검색 결과에 섞여 나오는 무관한 공고
+    assert not m.match("일반 사무보조 채용", "무관상사")
+    # 검색어를 함께 넘기면 무관한 공고까지 통과해 버린다 — 넘기지 않아야 한다
+    assert m.match("일반 사무보조 채용", "무관상사", "정보통신기술사")
+    print("  ✓ 검색어 우회 회귀: 검색어 미전달 시 오탐 차단 확인")
+
+
+def test_fallback_runs_when_rows_matched_but_nothing_adopted(monkeypatch_get):
+    """회귀: 선택자가 행을 일부만 잡아도(kpea 1건) 폴백이 돌아야 한다."""
+    bad_cfg = dict(CFG, row_selector="table thead tr")   # 존재하지 않는 행
+    posts, scanned = board_collect(bad_cfg, SETTINGS, KeywordMatcher(KEYWORDS))
+    assert len(posts) == 3, [p.title for p in posts]
+    assert scanned > 0
+    print("  ✓ 폴백 트리거 회귀: 선택자 부분 적중 시에도", len(posts), "건 복구")
+
+
+def test_gamriwon_titles_are_matched():
+    """정보통신기술사는 특급감리원 자격요건 — 감리원 공고가 누락되면 안 된다."""
+    m = KeywordMatcher(KEYWORDS)
+    assert m.match("본사 비상주 정보통신감리원 모집", "디에이치기술단")
+    assert not m.match("건축 감리원 모집", "무관건설")   # 정보통신 맥락 없음 -> 제외
+    print("  ✓ 감리원 키워드: 정보통신 맥락만 선별 채택")
+
+
 if __name__ == "__main__":
     http.get = lambda *a, **k: FakeResponse()          # 네트워크 차단 환경용 스텁
     import src.collectors.generic_board as gb
@@ -130,4 +157,7 @@ if __name__ == "__main__":
     test_six_month_split_and_order()
     test_dedupe_prefers_dated()
     test_html_report_renders_links_and_escapes()
+    test_search_query_does_not_bypass_filter()
+    test_fallback_runs_when_rows_matched_but_nothing_adopted(None)
+    test_gamriwon_titles_are_matched()
     print("\n전체 통과 ✅")

@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import logging
+import ssl
 import time
 
 import requests
+from requests.adapters import HTTPAdapter
 
 log = logging.getLogger(__name__)
 
@@ -14,6 +16,33 @@ UA = (
 )
 
 _last_call: dict[str, float] = {}
+
+
+class _LegacyTLSAdapter(HTTPAdapter):
+    """구형 서명 알고리즘(SHA1-RSA 등)을 쓰는 서버용 어댑터.
+
+    OpenSSL 3.x는 기본 보안수준(SECLEVEL=2)에서 이런 인증서를 거부해
+    WRONG_SIGNATURE_TYPE으로 핸드셰이크가 깨진다. 국내 협회·공공 사이트에
+    아직 흔해 SECLEVEL만 낮춰 연결한다. **인증서 검증은 그대로 유지**한다.
+    """
+
+    def init_poolmanager(self, *args, **kwargs):
+        ctx = ssl.create_default_context()
+        ctx.set_ciphers("DEFAULT:@SECLEVEL=1")
+        ctx.options |= getattr(ssl, "OP_LEGACY_SERVER_CONNECT", 0)
+        kwargs["ssl_context"] = ctx
+        return super().init_poolmanager(*args, **kwargs)
+
+
+_legacy_session: requests.Session | None = None
+
+
+def _legacy() -> requests.Session:
+    global _legacy_session
+    if _legacy_session is None:
+        _legacy_session = requests.Session()
+        _legacy_session.mount("https://", _LegacyTLSAdapter())
+    return _legacy_session
 
 
 def _throttle(host: str, delay: float) -> None:
@@ -43,7 +72,12 @@ def get(
     for attempt in range(retries):
         try:
             _throttle(host, delay)
-            resp = requests.get(url, params=params, headers=headers, timeout=timeout)
+            try:
+                resp = requests.get(url, params=params, headers=headers, timeout=timeout)
+            except requests.exceptions.SSLError:
+                # 구형 TLS 서버 — 보안수준을 낮춘 세션으로 1회 재시도
+                log.warning("%s TLS 핸드셰이크 실패 — 레거시 TLS로 재시도", host)
+                resp = _legacy().get(url, params=params, headers=headers, timeout=timeout)
             resp.raise_for_status()
             # 국내 사이트는 EUC-KR/CP949가 흔하다. requests 추정이 빗나가면 apparent로 교정.
             if resp.encoding in (None, "ISO-8859-1"):

@@ -77,10 +77,16 @@ def collect(cfg: dict, settings: dict, matcher: KeywordMatcher) -> tuple[list[Po
             if item:
                 postings.append(item)
 
-    if not postings and not rows:
-        # 폴백: 선택자가 완전히 빗나감 → 문서 전체 링크 스캔
-        log.warning("[%s] 선택자 미적중 — 전체 링크 폴백", cfg["id"])
+    if not postings:
+        # 폴백: 선택자가 빗나갔거나 행을 거의 못 잡음 → 문서 전체 링크 스캔.
+        # 행을 몇 개 잡고도 0건이면 선택자가 부분적으로만 맞은 것이므로 함께 폴백한다.
+        log.warning("[%s] 채택 0건(행 %d개) — 전체 링크 폴백", cfg["id"], len(rows))
+        seen_anchors = set()
         for anchor in soup.find_all("a"):
+            ident = (anchor.get("href", ""), anchor.get_text(" ", strip=True))
+            if ident in seen_anchors:
+                continue
+            seen_anchors.add(ident)
             scanned += 1
             row = anchor.find_parent(["tr", "li", "article", "div"]) or anchor
             item = _make_posting(cfg, anchor, row, matcher)
