@@ -24,6 +24,22 @@ class BrowserUnavailable(RuntimeError):
     """Playwright 미설치 등으로 렌더링할 수 없음."""
 
 
+# 로그인 폼이 레이어 팝업 안에 숨어 있으면 page.fill이 '보이는 요소'를 기다리다
+# 타임아웃 난다(실측: ITPE에서 30초 초과). 폼은 DOM에 있으므로 JS로 직접 채운다.
+_LOGIN_JS = """([idField, pwField, user, password]) => {
+  const input = document.querySelector(`input[name="${idField}"]`);
+  if (!input) return 'no-field';
+  const form = input.form;
+  if (!form) return 'no-form';
+  form.querySelector(`[name="${idField}"]`).value = user;
+  const pw = form.querySelector(`[name="${pwField}"]`);
+  if (!pw) return 'no-password-field';
+  pw.value = password;
+  form.submit();
+  return 'submitted';
+}"""
+
+
 def _do_login(page, login: dict, timeout_ms: int) -> None:
     """브라우저에서 로그인 폼을 채우고 제출한다.
 
@@ -31,20 +47,24 @@ def _do_login(page, login: dict, timeout_ms: int) -> None:
     회원 전용 게시판의 실제 주소를 모를 때 이 경로가 유일한 방법이다.
     """
     page.goto(login["url"], wait_until="domcontentloaded", timeout=timeout_ms)
-    id_sel = f'input[name="{login["id_field"]}"]'
-    pw_sel = f'input[name="{login["pw_field"]}"]'
     try:
-        page.fill(id_sel, login["user"])
-        page.fill(pw_sel, login["password"])
-        page.press(pw_sel, "Enter")
+        result = page.evaluate(
+            _LOGIN_JS,
+            [login["id_field"], login["pw_field"], login["user"], login["password"]],
+        )
     except Exception as exc:  # noqa: BLE001
-        log.warning("로그인 폼 입력 실패(%s) — 비로그인으로 진행", exc)
+        log.warning("로그인 폼 조작 실패(%s) — 비로그인으로 진행", exc)
         return
+
+    if result != "submitted":
+        log.warning("로그인 폼을 찾지 못함(%s) — 비로그인으로 진행", result)
+        return
+
     try:
-        page.wait_for_load_state("networkidle", timeout=10000)
+        page.wait_for_load_state("networkidle", timeout=15000)
     except Exception:  # noqa: BLE001
         pass
-    log.info("로그인 시도 후 위치: %s", page.url)
+    log.info("로그인 제출 후 위치: %s", page.url)
 
 
 def render(url: str, *, wait_for: str | None = None, eval_js: str | None = None,
