@@ -9,7 +9,7 @@ from pathlib import Path
 
 import yaml
 
-from . import report, state
+from . import diagnose, http, report, state
 from .collectors import REGISTRY
 from .collectors.work24 import SkipSource
 from .filters import KeywordMatcher
@@ -75,6 +75,9 @@ def main(argv: list[str] | None = None) -> int:
                         help="메일을 보내지 않고 out/digest.html 로만 저장")
     parser.add_argument("--no-state", action="store_true",
                         help="NEW 배지 상태파일을 읽거나 쓰지 않음")
+    parser.add_argument("--diagnose", metavar="SOURCE_ID",
+                        help="해당 소스가 실제로 받아오는 HTML을 진단 출력하고 종료 "
+                             "(all 이면 전체). 선택자·로그인 문제 파악용")
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO,
@@ -83,6 +86,18 @@ def main(argv: list[str] | None = None) -> int:
     cfg = yaml.safe_load(CONFIG.read_text(encoding="utf-8"))
     matcher = KeywordMatcher(cfg.get("keywords", {}))
     today = date.today()
+
+    if args.diagnose:
+        targets = [s for s in cfg["sources"]
+                   if args.diagnose == "all" or s["id"] == args.diagnose]
+        if not targets:
+            log.error("소스 '%s'를 찾을 수 없습니다. 가능한 값: %s",
+                      args.diagnose, ", ".join(s["id"] for s in cfg["sources"]))
+            return 1
+        for source in targets:
+            diagnose.run(source, cfg, cfg["keywords"]["qualifications"],
+                         session=http.login(source.get("login"), source["id"]))
+        return 0
 
     postings, results = collect_all(cfg, matcher)
     postings = dedupe(postings)

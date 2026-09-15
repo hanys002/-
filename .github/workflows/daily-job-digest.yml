@@ -11,6 +11,10 @@ on:
         description: '메일 발송 없이 리포트만 생성'
         type: boolean
         default: false
+      diagnose:
+        description: "소스 진단 (소스 id 또는 all). 예: kpea — 선택자·로그인 문제 파악용"
+        type: string
+        default: ''
 
 permissions:
   contents: write        # state/seen.json 커밋용
@@ -45,8 +49,19 @@ jobs:
           MAIL_TO: ${{ vars.MAIL_TO || secrets.GMAIL_USER }}
           SARAMIN_API_KEY: ${{ secrets.SARAMIN_API_KEY }}
           WORK24_API_KEY: ${{ secrets.WORK24_API_KEY }}
+          # 협회 게시판 로그인 (회원 전용 게시판 열람용)
+          KPEA_ID: ${{ secrets.KPEA_ID }}
+          KPEA_PW: ${{ secrets.KPEA_PW }}
+          ITPE_ID: ${{ secrets.ITPE_ID }}
+          ITPE_PW: ${{ secrets.ITPE_PW }}
+          GAMLI_ID: ${{ secrets.GAMLI_ID }}
+          GAMLI_PW: ${{ secrets.GAMLI_PW }}
         run: |
-          python -m src.main ${{ inputs.dry_run && '--dry-run' || '' }}
+          if [ -n "${{ inputs.diagnose }}" ]; then
+            python -m src.main --diagnose "${{ inputs.diagnose }}"
+          else
+            python -m src.main ${{ inputs.dry_run && '--dry-run' || '' }}
+          fi
 
       - name: 리포트 아티팩트 업로드
         if: always()
@@ -58,7 +73,7 @@ jobs:
           if-no-files-found: warn
 
       - name: 조회 이력 커밋
-        if: success() && !inputs.dry_run
+        if: success() && !inputs.dry_run && !inputs.diagnose
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

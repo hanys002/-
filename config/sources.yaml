@@ -4,8 +4,8 @@
 #                초과분은 리포트 하단 "참고(오래된 공고)" 섹션으로 이동.
 # ---------------------------------------------------------------
 
-recency_days: 183          # 약 6개월
-max_items_per_source: 60
+recency_days: 365          # 1년. 초과분은 하단 '참고' 섹션으로
+max_items_per_source: 100
 request_timeout: 25
 request_delay: 1.2         # 소스별 요청 간 최소 간격(초) - 예의상 rate limit
 
@@ -89,6 +89,16 @@ sources:
     title_selector: "a"
     date_selector: "td:nth-last-child(1), td:nth-last-child(2)"
     link_attr: href
+    # 회원 전용 게시판이면 로그인해야 목록이 보인다.
+    # 아이디·비밀번호는 여기 적지 말 것 — GitHub 시크릿에서만 읽는다.
+    # 실제 폼 필드명은 `--diagnose kpea` 결과를 보고 맞춘다.
+    login:
+      url: https://www.kpea.or.kr/kpea/member/LoginProc.do
+      id_field: userId
+      pw_field: userPw
+      id_env: KPEA_ID
+      pw_env: KPEA_PW
+      success_marker: 로그아웃
 
   - id: itpe
     name: 한국정보통신기술사회 채용/구인
@@ -97,6 +107,13 @@ sources:
     url: https://www.itpe.or.kr/
     base: https://www.itpe.or.kr
     enabled: true
+    login:
+      url: https://www.itpe.or.kr/member/loginProc
+      id_field: userId
+      pw_field: userPw
+      id_env: ITPE_ID
+      pw_env: ITPE_PW
+      success_marker: 로그아웃
     row_selector: "table tbody tr, ul li"
     title_selector: "a"
     date_selector: "td, span, em"
@@ -158,6 +175,15 @@ sources:
     url: http://www.gamli.or.kr/base/work/work_01.php?topmenu=5
     base: http://www.gamli.or.kr/base/work/
     enabled: true
+    # 비회원은 상세 열람이 막혀 있다(href가 javascript:alert). 로그인하면
+    # 상세 링크가 살아나 메일에서 바로 열 수 있다.
+    login:
+      url: http://www.gamli.or.kr/base/login/login_ok.php
+      id_field: id
+      pw_field: pw
+      id_env: GAMLI_ID
+      pw_env: GAMLI_PW
+      success_marker: 로그아웃
     row_selector: "table tbody tr, table tr"
     title_selector: "a"
     date_selector: "td"

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import ssl
 import time
 
@@ -60,6 +61,7 @@ def get(
     timeout: int = 25,
     delay: float = 1.2,
     retries: int = 3,
+    session: requests.Session | None = None,
 ) -> requests.Response:
     """GET + 지수 백오프 재시도. 마지막 실패는 예외로 전파한다."""
     host = requests.utils.urlparse(url).netloc
@@ -72,12 +74,17 @@ def get(
     for attempt in range(retries):
         try:
             _throttle(host, delay)
+            getter = session.get if session is not None else requests.get
             try:
-                resp = requests.get(url, params=params, headers=headers, timeout=timeout)
+                resp = getter(url, params=params, headers=headers, timeout=timeout)
             except requests.exceptions.SSLError:
                 # 구형 TLS 서버 — 보안수준을 낮춘 세션으로 1회 재시도
                 log.warning("%s TLS 핸드셰이크 실패 — 레거시 TLS로 재시도", host)
-                resp = _legacy().get(url, params=params, headers=headers, timeout=timeout)
+                if session is not None:
+                    session.mount("https://", _LegacyTLSAdapter())
+                    resp = session.get(url, params=params, headers=headers, timeout=timeout)
+                else:
+                    resp = _legacy().get(url, params=params, headers=headers, timeout=timeout)
             resp.raise_for_status()
             # 국내 사이트는 EUC-KR/CP949가 흔하다. requests 추정이 빗나가면 apparent로 교정.
             if resp.encoding in (None, "ISO-8859-1"):
@@ -90,3 +97,51 @@ def get(
                 log.warning("GET %s 실패(%s) — %ss 후 재시도", url, exc, back)
                 time.sleep(back)
     raise last  # type: ignore[misc]
+
+
+def login(cfg: dict, source_id: str) -> requests.Session | None:
+    """협회 게시판 로그인. 자격정보는 환경변수(=GitHub 시크릿)에서만 읽는다.
+
+    설정 예:
+        login:
+          url: https://www.kpea.or.kr/kpea/member/LoginProc.do
+          id_field: userId
+          pw_field: userPw
+          id_env: KPEA_ID
+          pw_env: KPEA_PW
+          extra: {returnUrl: "/"}
+          success_marker: 로그아웃
+
+    자격정보가 없으면 None을 돌려주고 비로그인으로 진행한다.
+    """
+    if not cfg:
+        return None
+    user = os.environ.get(cfg.get("id_env", ""), "").strip()
+    password = os.environ.get(cfg.get("pw_env", ""), "").strip()
+    if not user or not password:
+        log.info("[%s] 로그인 자격정보 없음 — 비로그인으로 진행", source_id)
+        return None
+
+    session = requests.Session()
+    session.headers.update({"User-Agent": UA, "Accept-Language": "ko-KR,ko;q=0.9"})
+    payload = dict(cfg.get("extra") or {})
+    payload[cfg.get("id_field", "userId")] = user
+    payload[cfg.get("pw_field", "userPw")] = password
+
+    try:
+        resp = session.post(cfg["url"], data=payload, timeout=25, allow_redirects=True)
+        resp.raise_for_status()
+        if resp.encoding in (None, "ISO-8859-1"):
+            resp.encoding = resp.apparent_encoding or "utf-8"
+    except Exception as exc:  # noqa: BLE001 - 로그인 실패해도 비로그인으로 계속한다
+        log.warning("[%s] 로그인 요청 실패(%s) — 비로그인으로 진행", source_id, exc)
+        return None
+
+    marker = cfg.get("success_marker", "로그아웃")
+    if marker and marker not in resp.text:
+        log.warning("[%s] 로그인 실패로 보임 — '%s'를 찾지 못함. 비로그인으로 진행",
+                    source_id, marker)
+        return None
+
+    log.info("[%s] 로그인 성공", source_id)
+    return session

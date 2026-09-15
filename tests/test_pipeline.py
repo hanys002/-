@@ -437,6 +437,27 @@ def test_detail_fetch_budget_is_respected():
     print("  ✓ 상세 조회 상한: 30건 후보 중 5건만 조회")
 
 
+def test_recency_window_is_one_year():
+    assert CONFIG["recency_days"] == 365, CONFIG["recency_days"]
+    print("  ✓ 수집 범위: 최근 1년")
+
+
+def test_login_credentials_are_never_in_config():
+    """자격정보는 설정 파일이 아니라 환경변수(=시크릿)에서만 읽어야 한다."""
+    raw = (ROOT / "config" / "sources.yaml").read_text(encoding="utf-8")
+    for src in CONFIG["sources"]:
+        login = src.get("login")
+        if not login:
+            continue
+        assert "id_env" in login and "pw_env" in login, src["id"]
+        # 값을 직접 적는 키가 있으면 안 된다
+        assert "id" not in login and "pw" not in login, src["id"]
+        assert "password" not in login, src["id"]
+    # 흔한 실수: 평문 비밀번호가 설정에 섞여 들어가는 것
+    assert "password:" not in raw.lower(), "설정에 평문 비밀번호로 보이는 키가 있습니다"
+    print("  ✓ 로그인 자격정보: 설정 파일에 평문 없음 (시크릿 참조만)")
+
+
 if __name__ == "__main__":
     print("기술사 채용 다이제스트 — 파이프라인 테스트\n")
     test_all_three_qualifications_configured()
@@ -447,6 +468,8 @@ if __name__ == "__main__":
     test_detail_verification_catches_body_only_mentions()
     test_detail_fetch_budget_is_respected()
     test_every_source_has_a_registered_collector()
+    test_recency_window_is_one_year()
+    test_login_credentials_are_never_in_config()
     test_portal_queries_cover_all_qualifications()
     test_navigation_and_news_are_not_postings()
     test_unusable_links_fall_back_to_board_url()
