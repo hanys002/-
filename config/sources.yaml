@@ -97,42 +97,32 @@ sources:
       posted: 6
 
   - id: itpe
-    name: 한국정보통신기술사회 채용/구인
+    name: 한국정보통신기술사회 열린공간
     org: 한국정보통신기술사회(ITPE)
     type: html_board
-    # www.itpe.or.kr/ 는 67바이트 리다이렉트 스텁이라 내용이 없다(진단으로 확인).
-    # 실제 사이트는 /main/ko/ 아래에 있다. 구인 게시판 경로는 진단으로 찾는다.
-    # 구인 게시판은 회원 전용이고, 주소를 추정으로 맞힐 수 없다.
-    #   sub04_02.html → 실재하나 "회원님은 접근 권한이 없습니다"
-    #   sub07_01~03.html → 전부 404 (메뉴번호와 파일번호가 1:1이 아니다)
-    # 그래서 메인 페이지에서 로그인한 뒤 열린공간 메뉴를 실제로 클릭한다.
-    # 이동한 주소는 로그의 '최종 위치'에 찍히므로 그걸 보고 확정하면 된다.
-    url: https://itpe.or.kr/main/ko/index.html
-    base: https://itpe.or.kr/main/ko/
-    render: true
-    eval_js: "menu('sub7_1')"
+    # 회원 전용 게시판. 주소는 로그인한 브라우저가 menu('sub7_1')로 실제
+    # 이동한 결과에서 확보했다. bbsList.php로 9번 추측했던 것이 전부 404였고,
+    # 실제 파일명은 index.php, 게시판 코드는 bbs_sb0701이었다.
+    url: https://itpe.or.kr/modules/bbs/index.php?code=bbs_sb0701&xid=2
+    base: https://itpe.or.kr/modules/bbs/
     enabled: true
-    # 로그인 폼 필드명은 브라우저 렌더링 진단으로 확인한 실제 값이다.
-    # (추정값 userId/userPw는 틀렸다)
+    render: true
+    # 목록 표가 그려질 때까지 기다린다.
+    wait_for: "table tbody tr, table tr"
+    row_selector: "table tbody tr, table tr"
+    title_selector: "a"
+    date_selector: "td"
+    link_attr: href
     login:
-      url: https://itpe.or.kr/modules/member/memberProcess.php
-      # form_url이 있으면 브라우저가 이 페이지에서 폼을 채워 로그인한다.
-      # 로그인 폼은 메인 페이지가 아니라 회원 페이지에 있다(실측: 메인에서
-      # 시도하면 no-field). menu('sub7_1')이 이동하는 주소가 바로 여기다.
+      # 브라우저가 이 페이지에서 폼을 채워 로그인한다.
+      # 로그인 폼은 메인이 아니라 회원 페이지에 있다(실측: 메인은 no-field).
       form_url: https://itpe.or.kr/modules/member/index.php?lang_type=ko
+      url: https://itpe.or.kr/modules/member/memberProcess.php
       id_field: userID
       pw_field: password
       id_env: ITPE_ID
       pw_env: ITPE_PW
-      extra:
-        memberMode: login
-        goURL: /main/ko/
-        idMemory: N
       success_marker: 로그아웃
-    row_selector: "table tbody tr, ul li"
-    title_selector: "a"
-    date_selector: "td, span, em"
-    link_attr: href
 
   - id: pesk
     name: 대한기술사회 구인구직
