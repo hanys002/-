@@ -22,6 +22,7 @@ STATE = ROOT / "state" / "seen.json"
 OUT = ROOT / "out"
 
 log = logging.getLogger("digest")
+SAMPLE_TITLES = 8   # 소스별로 로그에 남길 채택 제목 수
 
 
 def collect_all(cfg: dict, matcher: KeywordMatcher) -> tuple[list[Posting], list[SourceResult]]:
@@ -44,6 +45,11 @@ def collect_all(cfg: dict, matcher: KeywordMatcher) -> tuple[list[Posting], list
             results.append(SourceResult(source["id"], name, True,
                                         postings=found, scanned=scanned))
             log.info("[%s] %d건 수집 (%d건 스캔)", source["id"], len(found), scanned)
+            # 건수만으로는 오탐을 못 잡는다. 채택된 제목을 남겨 눈으로 검증한다.
+            for item in found[:SAMPLE_TITLES]:
+                log.info("      · %s", item.title[:80])
+            if len(found) > SAMPLE_TITLES:
+                log.info("      · … 외 %d건", len(found) - SAMPLE_TITLES)
         except SkipSource as skip:
             results.append(SourceResult(source["id"], name, False, error=f"건너뜀 — {skip}"))
         except Exception as exc:  # noqa: BLE001 - 소스 장애를 리포트에 남기고 계속 진행
@@ -88,12 +94,15 @@ def main(argv: list[str] | None = None) -> int:
     html_body = report.build_html(recent, old, results, new_count,
                                   cfg.get("recency_days", 183), today,
                                   sources=cfg.get("sources", []))
-    text_body = report.build_text(recent, old, today)
+    text_body = report.build_text(recent, old, today, results)
 
     OUT.mkdir(exist_ok=True)
     (OUT / "digest.html").write_text(html_body, encoding="utf-8")
     log.info("총 %d건 (최근 %d / 참고 %d / 신규 %d)",
              len(postings), len(recent), len(old), new_count)
+
+    log.info("요약 | %s", " / ".join(
+        f"{r.source_id}:{len(r.postings) if r.ok else 'X'}" for r in results))
 
     ok_sources = sum(1 for r in results if r.ok)
     if ok_sources == 0:

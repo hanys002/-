@@ -183,7 +183,12 @@ def build_html(
 </td></tr></table></td></tr></table></body></html>"""
 
 
-def build_text(recent: list[Posting], old: list[Posting], today: date) -> str:
+def build_text(
+    recent: list[Posting],
+    old: list[Posting],
+    today: date,
+    results: list[SourceResult] | None = None,
+) -> str:
     """HTML 미지원 클라이언트용 대체 본문."""
     lines = [f"기술사 채용공고 데일리 브리핑 — {today:%Y-%m-%d}", ""]
     for label, group in (("[최근 공고]", recent), ("[참고 — 오래된 공고]", old)):
@@ -194,5 +199,10 @@ def build_text(recent: list[Posting], old: list[Posting], today: date) -> str:
             mark = "NEW " if post.is_new else ""
             lines.append(f"  {post.date_text} {mark}{post.title} ({post.org})")
             lines.append(f"    {post.url}")
+        lines.append("")
+    if results:
+        lines.append("[수집 소스 상태]")
+        for r in results:
+            lines.append(f"  {r.source_name}: {r.status_text}")
         lines.append("")
     return "\n".join(lines)
