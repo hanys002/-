@@ -570,6 +570,67 @@ def test_board_rows_can_be_anchors_themselves():
     print("  ✓ 링크가 곧 행인 게시판: 제목·상세링크·날짜 모두 수집")
 
 
+def test_work24_auth_error_is_diagnosable_and_key_never_logged():
+    """인증키 오류를 첫 실행에서 판정할 수 있어야 하고, 키는 절대 남으면 안 된다.
+
+    기존에는 'XML 파싱 실패'만 남아 키가 틀린 건지, 승인 대기인지,
+    결과가 0건인지 구분할 수 없었다. 반대로 응답을 그대로 남기면 오류
+    응답이 인증키를 되돌려줄 때 공개 로그에 새어 나간다.
+    """
+    import os
+    import src.collectors.work24 as w
+
+    SECRET = "ABCD-1234-SECRET-KEY-5678"
+
+    class Resp:
+        status_code = 200
+        # 실제 오류 응답을 모사: 본문이 인증키를 그대로 되돌려준다
+        content = f"<!-- 인증키가 유효하지 않습니다: {SECRET} -->".encode("utf-8")
+
+    orig_get, orig_key = w.http.get, os.environ.get("WORK24_API_KEY")
+    w.http.get = lambda *a, **k: Resp()
+    os.environ["WORK24_API_KEY"] = SECRET
+    try:
+        cfg = {"id": "work24", "name": "워크넷", "org": "워크넷",
+               "api_url": "https://openapi.work.go.kr/x", "queries": ["정보통신기술사"]}
+        try:
+            w.collect(cfg, SETTINGS, KeywordMatcher(KEYWORDS))
+        except RuntimeError as exc:
+            msg = str(exc)
+        else:
+            raise AssertionError("인증 오류인데 예외가 나지 않았다")
+    finally:
+        w.http.get = orig_get
+        if orig_key is None:
+            os.environ.pop("WORK24_API_KEY", None)
+        else:
+            os.environ["WORK24_API_KEY"] = orig_key
+
+    assert "승인" in msg or "유효하지" in msg, msg      # 원인을 지목해야 한다
+    assert SECRET not in msg, "인증키가 오류 메시지에 그대로 노출됐다"
+    assert "***" in msg, msg
+    print("  ✓ 워크넷 API: 인증 오류 원인 지목 + 인증키 마스킹")
+
+
+def test_work24_without_key_is_skipped_not_failed():
+    """키가 없으면 조용히 건너뛰고, 그 사실이 메일에 남아야 한다."""
+    import os
+    import src.collectors.work24 as w
+
+    orig = os.environ.pop("WORK24_API_KEY", None)
+    try:
+        try:
+            w.collect({"id": "work24", "queries": []}, SETTINGS, KeywordMatcher(KEYWORDS))
+        except w.SkipSource as exc:
+            assert "WORK24_API_KEY" in str(exc), str(exc)
+        else:
+            raise AssertionError("키가 없는데 SkipSource가 아니다")
+    finally:
+        if orig is not None:
+            os.environ["WORK24_API_KEY"] = orig
+    print("  ✓ 워크넷 API: 키 미설정 시 건너뛰기(파이프라인 중단 아님)")
+
+
 # 한국기술사회 구인게시판의 실제 구조(--diagnose kpea로 확인).
 # 제목 컬럼이 없고 셀에 정보가 나뉘어 있어, 앵커 텍스트를 제목으로 읽는
 # 방식으로는 통째로 놓친다. 실측에서 HTML에 '정보통신기술사'가 있는데도
@@ -686,6 +747,8 @@ if __name__ == "__main__":
     test_diagnose_runs_without_crashing()
     test_diagnose_finds_list_container()
     test_board_rows_can_be_anchors_themselves()
+    test_work24_auth_error_is_diagnosable_and_key_never_logged()
+    test_work24_without_key_is_skipped_not_failed()
     test_portal_queries_cover_all_qualifications()
     test_navigation_and_news_are_not_postings()
     test_unusable_links_fall_back_to_board_url()
