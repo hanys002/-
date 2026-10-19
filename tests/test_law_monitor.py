@@ -18,7 +18,7 @@ from src.law_monitor.__main__ import FixtureClient, main
 from src.law_monitor.api import Detail, LawAPIError, LawClient, Version, parse_detail
 from src.law_monitor.delivery import DeliveryError, send_report
 from src.law_monitor.pipeline import collect, compare
-from src.law_monitor.report import render, write_pdf
+from src.law_monitor.report import ReportValidationError, excerpt, render, write_pdf
 
 ROOT = Path(__file__).resolve().parent.parent
 FIXTURE = ROOT / 'tests/fixtures/law'
@@ -169,6 +169,32 @@ class APIAndPipelineTests(unittest.TestCase):
         self.assertNotIn('<script>', render(report))
         self.assertIn('&lt;script&gt;', render(report))
 
+    def test_long_originals_become_bounded_summary_and_links(self):
+        report = collect(FixtureClient(FIXTURE / 'example.json'), CONFIG, TODAY)
+        item = report.analyses[0]
+        item.detail.reason = '◇ 주요내용\n교육 기준을 정비함. ' + '공식 설명 추가 문장. ' * 10000
+        item.detail.supplements = 'SUPPLEMENT_FULL_TEXT ' * 10000
+        item.detail.amendment_text = 'AMENDMENT_FULL_TEXT ' * 10000
+        item.changes = [{'article': f'제{i}조', 'before': 'OLD_FULL_TEXT ' * 1000,
+                         'after': 'NEW_FULL_TEXT ' * 1000} for i in range(1, 63)]
+        html = render(report)
+        self.assertLess(len(html), 15000)
+        self.assertIn('교육 기준을 정비함.', html)
+        self.assertIn('일부 발췌', html)
+        self.assertIn('변경 조문 62개', html)
+        self.assertIn('외 54개', html)
+        self.assertIn(item.version.url, html)
+        self.assertNotIn('SUPPLEMENT_FULL_TEXT', html)
+        self.assertNotIn('OLD_FULL_TEXT', html)
+        self.assertEqual(len(report.as_dict()['analyses'][0]['changes']), 62)
+
+    def test_excerpt_prefers_official_main_content(self):
+        result = excerpt('◇ 개정이유\n배경 설명\n◇ 주요내용\n가. 교육 기준을 정비함. 나. 기록 보관을 명확히 함.')
+        self.assertIn('교육 기준', result)
+        self.assertNotIn('배경 설명', result)
+        combined = excerpt('[일부개정]\n◇ 개정이유 및 주요내용\n감리관리시스템 근거를 마련함.')
+        self.assertEqual(combined, '감리관리시스템 근거를 마련함.')
+
     def test_failed_baseline_does_not_claim_zero_changed_articles(self):
         client = FixtureClient(FIXTURE / 'example.json')
         original = client.detail
@@ -183,6 +209,13 @@ class APIAndPipelineTests(unittest.TestCase):
 
 
 class DeliveryAndCLITests(unittest.TestCase):
+    def test_pdf_over_ten_pages_is_rejected(self):
+        html = '<html><body>' + '<p style="page-break-after:always">page</p>' * 11 + '</body></html>'
+        with tempfile.TemporaryDirectory() as folder:
+            pdf = Path(folder) / 'too-long.pdf'
+            with self.assertRaisesRegex(ReportValidationError, '최대 10페이지'):
+                write_pdf(html, pdf)
+            self.assertFalse(pdf.exists())
     @patch.dict(os.environ, {'GMAIL_USER': 'sender@example.com', 'GMAIL_APP_PASSWORD': 'test-password'})
     @patch('src.law_monitor.delivery.smtplib.SMTP_SSL')
     def test_mail_recipient_html_and_pdf(self, smtp):
@@ -234,6 +267,11 @@ class DeliveryAndCLITests(unittest.TestCase):
             pdf = next(Path(folder).glob('*.pdf'))
             self.assertTrue(pdf.read_bytes().startswith(b'%PDF-'))
             self.assertGreater(pdf.stat().st_size, 5000)
+            from pypdf import PdfReader
+            reader = PdfReader(pdf)
+            self.assertLessEqual(len(reader.pages), 10)
+            self.assertIn('한영기술사사무소', ''.join(page.extract_text() for page in reader.pages))
+            self.assertTrue(any(page.get('/Annots') for page in reader.pages))
             data = json.loads(next(Path(folder).glob('*.json')).read_text())
             self.assertTrue(data['demo'])
             self.assertEqual(len(data['upcoming']), 1)
@@ -253,14 +291,14 @@ class DeliveryAndCLITests(unittest.TestCase):
     @patch('src.law_monitor.__main__.write_pdf')
     @patch('src.law_monitor.__main__.send_report')
     @patch('src.law_monitor.__main__.LawClient')
-    def test_partial_detail_failure_sends_warning_and_exits_one(self, client, send, pdf):
+    def test_partial_detail_failure_blocks_sending_and_exits_one(self, client, send, pdf):
         source = FixtureClient(FIXTURE / 'example.json')
         source.detail = MagicMock(side_effect=LawAPIError('상세 미확인'))
         client.return_value = source
         with tempfile.TemporaryDirectory() as folder:
             code = main(['--send', '--date', TODAY.isoformat(), '--config', str(FIXTURE / 'config.yaml'), '--output', folder])
         self.assertEqual(code, 1)
-        self.assertIn('[일부 조회 미완료]', send.call_args.args[1])
+        send.assert_not_called()
 
     @patch('src.law_monitor.__main__.write_pdf', side_effect=RuntimeError('PDF failed'))
     @patch('src.law_monitor.__main__.send_report')

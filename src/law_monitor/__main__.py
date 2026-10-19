@@ -13,7 +13,7 @@ import yaml
 from .api import Detail, LawAPIError, LawClient, Version
 from .delivery import DeliveryError, send_report
 from .pipeline import collect
-from .report import render, write_pdf
+from .report import ReportValidationError, render, write_pdf
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -89,18 +89,24 @@ def main(argv=None) -> int:
     html_path.write_text(html, encoding="utf-8")
     data_path.write_text(json.dumps(report.as_dict(), ensure_ascii=False, indent=2, default=str), encoding="utf-8")
     try:
-        write_pdf(html, pdf_path)
+        pages = write_pdf(html, pdf_path, organization=report.organization)
+    except ReportValidationError as exc:
+        diagnostic(str(exc), warning=True)
+        return 2
     except Exception as exc:
         print(f"PDF 생성 실패 ({type(exc).__name__}): WeasyPrint·Pango·한글 글꼴 설치를 확인하세요", file=sys.stderr)
         return 2
+    diagnostic(f"PDF 발송 전 검증 완료: {pages}페이지 (최대 10페이지), 한글 기관명·조회 상태 확인")
     print(f"보고서: {pdf_path}\n목록 조회: {len(laws) - report.failures}/{len(laws)}개 법령, "
           f"기간 내 {len(report.weekly)}개 버전 / 시행 예정 {len(report.upcoming)}개 버전")
     if report.failures == len(laws):
         print("전체 법령 조회 실패 — 실패 보고서만 저장, 발송하지 않음", file=sys.stderr)
         return 2
     if args.send:
-        label = "[일부 조회 미완료] " if report.incomplete else ""
-        subject = f"{label}[정보통신 법령] {today} 주간 모니터링"
+        if report.incomplete:
+            diagnostic("조회 미완료 항목이 있어 발송을 중단했습니다. 보고서 파일과 진단을 확인하세요.", warning=True)
+            return 1
+        subject = f"[정보통신 법령·요약본] {today} 주간 모니터링"
         try:
             send_report(cfg["recipient"], subject, html, pdf_path,
                         organization=report.organization)
