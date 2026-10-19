@@ -65,6 +65,20 @@ def main(argv=None) -> int:
             return 2
     report = collect(client, cfg, today)
     report.demo = bool(args.fixture)
+    def diagnostic(message, warning=False):
+        print(message, flush=True)
+        if os.environ.get("GITHUB_ACTIONS") == "true":
+            escaped = message.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+            level = 'warning' if warning else 'notice'
+            print(f'::{level}::{escaped}', flush=True)
+    diagnostic(f"목록 조회 {len(laws) - report.failures}/{len(laws)}개, "
+               f"기간 내 {len(report.weekly)}개 버전, 시행 예정 {len(report.upcoming)}개 버전")
+    for name, status in report.statuses.items():
+        if status != "확인 완료":
+            diagnostic(f"{name}: {status}", warning=True)
+    for analysis in report.analyses:
+        if analysis.error:
+            diagnostic(f"{analysis.version.name} (시행 {analysis.version.effective}): {analysis.error}", warning=True)
     args.output.mkdir(parents=True, exist_ok=True)
     stem = ("EXAMPLE_" if report.demo else "") + f"정보통신_법령개정_모니터링_{today}"
     html_path = args.output / f"{stem}.html"
