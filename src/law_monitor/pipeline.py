@@ -15,6 +15,7 @@ class Analysis:
     previous: Version | None = None
     changes: list[dict[str, str]] = field(default_factory=list)
     error: str = ""
+    comparison_note: str = ""
 
 
 @dataclass
@@ -76,6 +77,7 @@ def collect(client, config: dict, today: date) -> Report:
         weekly.extend(recent)
         upcoming.extend(future)
         selected = {v.serial: v for v in recent + future}
+        change_targets = set(selected)
         if name in config.get("core_laws", []):
             current = [v for v in versions if v.effective and v.effective <= today]
             if current:
@@ -87,7 +89,9 @@ def collect(client, config: dict, today: date) -> Report:
                 analysis.detail = client.detail(version)
                 if not (analysis.detail.reason or analysis.detail.amendment_text):
                     analysis.error = "개정이유·개정문 미제공: 주요 개정 내용은 원문 확인 필요"
-                if name in config.get("core_laws", []):
+                if name in config.get("core_laws", []) and version.serial not in change_targets:
+                    analysis.comparison_note = "현행 기준본: 이번 점검 기간의 공포·시행 또는 시행 예정 대상이 아니므로 이전 버전 대비 대상에서 제외"
+                elif name in config.get("core_laws", []):
                     previous = [v for v in versions if v.serial != version.serial and
                                 v.effective and version.effective and v.effective < version.effective
                                 and v.announced <= version.announced]
