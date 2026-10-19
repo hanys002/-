@@ -32,6 +32,7 @@ class Report:
     title: str
     organization: str = "한영기술사사무소"
     demo: bool = False
+    core_laws: list[str] = field(default_factory=list)
 
     @property
     def failures(self) -> int:
@@ -111,4 +112,5 @@ def collect(client, config: dict, today: date) -> Report:
                   sorted(weekly, key=lambda v: (v.effective or date.min, v.name)),
                   sorted(upcoming, key=lambda v: (v.effective or date.max, v.name)),
                   analyses, config.get("manual_checks", []), config["title"],
-                  organization=config.get("organization", "한영기술사사무소"))
+                  organization=config.get("organization", "한영기술사사무소"),
+                  core_laws=config.get("core_laws", []))
