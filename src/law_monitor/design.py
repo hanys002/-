@@ -27,7 +27,7 @@ def highlight(value: str) -> str:
 COVER_CSS = '''
 @page cover { margin: 0; counter-reset: page 0;
  @bottom-center { content: none; } @bottom-left { content: none; }
- @bottom-right { content: none; } @top-right { content: none; } }
+ @bottom-right { content: none; } @top-right { content: none; } @top-left { content: none; } }
 body { margin: 0; }
 .cover { page: cover; width: 210mm; height: 297mm; position: relative; break-after: page; color: #17232e; }
 .cover-top { position: absolute; top: 0; left: 0; width: 100%; height: 62mm;
@@ -55,9 +55,41 @@ tr { break-inside: avoid; }
 @media screen { .cover { max-width: 100%; } .cover-toc a::after { content: ''; } }
 '''
 
+BODY_CSS = '''
+.body-logo { position: running(body-logo); width: 45mm; }
+.body-org { position: running(body-org); color: #12325b; font-size: 9pt; font-weight: 700; text-align: right; }
+.report-body { color: #242b32; font-size: 10pt; line-height: 1.65; }
+.report-body header { border-bottom: 1px solid #98aebe; padding: 0 0 3mm; margin-bottom: 5mm; }
+.report-body header h1 { font-size: 13pt; margin: 0; color: #12325b; }
+.report-body header p { font-size: 9pt; color: #526474; margin: 1mm 0; }
+.report-body h2 { color: #172c46; border: 0; border-left: 4px solid #608da8; padding-left: 3mm; font-size: 16pt; line-height: 1.4; margin: 5mm 0; }
+.report-body h2.chapter { break-before: page; margin-top: 3mm; }
+.report-body h3 { font-size: 12pt; color: #17365a; border-bottom: 1px solid #9bb1c2; padding-bottom: 2mm; margin: 5mm 0 3mm; }
+.report-body .metrics { border: 1px solid #9eb9cd; background: #edf4f8; padding: 4mm; border-radius: 2mm; font-weight: 500; }
+.report-body .notice { border: 1px solid #b6c6d3; background: #f5f8fb; border-radius: 2mm; padding: 3mm 4mm; }
+.report-body .source { font-size: 9pt; line-height: 1.6; color: #4b5c68; }
+.report-body table { border: 1px solid #637c90; font-size: 9.5pt; line-height: 1.65; margin: 4mm 0; }
+.report-body th { background: #608da8; color: #fff; font-weight: 700; text-align: center; vertical-align: middle; border: 1px solid #4d718c; padding: 2.5mm; }
+.report-body td { border: 1px solid #9baebd; padding: 3mm; vertical-align: middle; }
+.report-body td.law-name { background: #f0f3f6; text-align: center; }
+.report-body td.law-name a { color: #184d85; font-weight: 700; }
+.report-body td.law-name small { display: block; color: #4f6170; font-size: 8.5pt; margin-top: 2mm; }
+.report-body td.schedule { text-align: center; font-size: 9pt; font-variant-numeric: tabular-nums; }
+.report-body td.schedule span { display: block; white-space: nowrap; }
+.report-body tr.core-row td.law-name { background: #dfebf4; border-left: 3px solid #608da8; }
+.report-body .card { border: 1px solid #9bb1c2; border-radius: 2mm; padding: 0; margin: 3mm 0 4mm; background: #fbfcfd; }
+.report-body .card h4 { background: #e8f0f6; border-bottom: 1px solid #b1c2cf; font-size: 10pt; margin: 0; padding: 2mm 3mm; }
+.report-body .card p { margin: 3mm; }
+.report-body ul { padding-left: 6mm; } .report-body li { margin-bottom: 2mm; }
+'''
+
+
+def logo_uri() -> str:
+    data = (Path(__file__).parent / 'assets/reference-association-logo.png').read_bytes()
+    return 'data:image/png;base64,' + base64.b64encode(data).decode('ascii')
+
 
 def cover(report) -> str:
-    logo = base64.b64encode((Path(__file__).parent / 'assets/reference-association-logo.png').read_bytes()).decode('ascii')
     toc = [('#monitor-status', '1. 모니터링 현황 및 참고', ''),
            ('#weekly-laws', '2. 금주 공포·시행 법령', ''),
            ('#upcoming-laws', '3. 시행 예정 법령', ''),
@@ -74,7 +106,7 @@ def cover(report) -> str:
 <path d="M0 213 C210 133 335 238 555 113 S755 48 840 28"/>
 <path d="M0 231 C210 151 335 256 555 131 S755 66 840 46"/></g></svg>
 <div class="cover-binary">0101 1100 0110<br>　1011 0010 1101<br>0110 1001 0011</div>
-<img class="cover-logo" src="data:image/png;base64,{logo}" alt="한국정보통신기술사회 — 참고 문서의 로고">
+<img class="cover-logo" src="{logo_uri()}" alt="한국정보통신기술사회 — 참고 문서의 로고">
 <div class="cover-org"><strong>{escape(report.organization)}</strong><br><small>ICT Technical Consultancy</small></div>
 <div class="cover-band"><h1>{escape(report.title)}</h1></div>
 <div class="cover-volume">Vol. {report.volume}</div>

@@ -7,7 +7,7 @@ from html import escape
 from pathlib import Path
 
 from .pipeline import Report
-from .design import COVER_CSS, cover, highlight
+from .design import BODY_CSS, COVER_CSS, cover, highlight, logo_uri
 
 MAX_PAGES = 10
 
@@ -56,7 +56,11 @@ def render(report: Report) -> str:
     analyses = {item.version.serial: item for item in report.analyses}
     parts = [f'''<!doctype html><html lang="ko"><head><meta charset="utf-8">
 <title>{h(badge + report.title)} · 요약본</title><style>
-@page {{ size: A4; margin: 15mm 13mm; @bottom-center {{ content: "- " counter(page) " -"; font-size: 9pt; }} }}
+@page {{ size: A4; margin: 20mm 13mm 17mm;
+@top-left {{ content: element(body-logo); }} @top-right {{ content: element(body-org); }}
+@bottom-left {{ content: "정보통신 법령 개정 모니터링 보고"; font-size: 8pt; color: #526474; }}
+@bottom-center {{ content: "- " counter(page) " -"; font-size: 9pt; }}
+@bottom-right {{ content: "Vol. {report.volume}"; font-size: 9pt; font-weight: bold; }} }}
 body {{ font-family: "Noto Sans CJK KR", "NanumGothic", sans-serif; color: #193047; font-size: 10pt; line-height: 1.5; }}
 header {{ border-bottom: 3px solid #137d91; padding: 10px 0; }}
 h1 {{ font-size: 21pt; }} h2 {{ color: #126b80; border-bottom: 1px solid #aac4ce; margin-top: 18px; break-after: avoid; }}
@@ -67,7 +71,9 @@ a {{ color: #00677c; }} .notice {{ background: #fff1d6; padding: 9px; }}
 .metrics {{ background: #e8f4f5; padding: 12px; }}
 .urgent {{ color: #b52525; font-weight: bold; }} .source {{ color: #516574; font-size: 9pt; }}
 .card {{ border-left: 3px solid #137d91; padding-left: 10px; margin: 12px 0; }}
-{COVER_CSS}</style></head><body>{cover(report)}<header><p><strong>{h(report.organization)}</strong></p>
+{COVER_CSS}{BODY_CSS}</style></head><body>{cover(report)}
+<img class="body-logo" src="{logo_uri()}" alt=""><div class="body-org">{h(report.organization)}</div>
+<main class="report-body"><header>
 <h1>{h(badge + report.title)} · 요약본</h1><p>보고일 {report.today} (한국시간) · 점검 기간 {report.start} ~ {report.end}</p></header>
 <h2 id="monitor-status">1. 모니터링 현황 및 참고</h2>
 <p class="metrics">대상 {len(report.statuses)}개 법령 · 목록 확인 {len(report.statuses) - report.failures}개 · 기간 내 공포·시행 {len(report.weekly)}개 버전 · 30일 내 시행 {imminent}개 버전 · 6개월 내 시행 {len(report.upcoming)}개 버전</p>
@@ -84,14 +90,26 @@ a {{ color: #00677c; }} .notice {{ background: #fff1d6; padding: 9px; }}
             urgency = ' class="urgent"' if future and day is not None and day <= 30 else ''
             item = analyses.get(v.serial)
             issue = f'<br><strong>미확인: {h(item.error)}</strong>' if item and item.error else ''
-            rows.append(f'<tr><td><a href="{h(v.url)}">{h(v.name)}</a><br>{h(v.kind)} 제{h(v.number)}호</td>'
-                        f'<td>공포 {h(v.announced)}<br><span{urgency}>시행 {h(v.effective)}</span><br><span{urgency}>{h(timing)}</span></td>'
+            row_class = ' class="core-row"' if v.name in report.core_laws else ''
+            rows.append(f'<tr{row_class}><td class="law-name"><a href="{h(v.url)}">{h(v.name)}</a><small>{h(v.kind)} 제{h(v.number)}호</small></td>'
+                        f'<td class="schedule"><span>공포 {h(v.announced)}</span><span{urgency}>시행 {h(v.effective)}</span><span{urgency}>{h(timing)}</span></td>'
                         f'<td>{highlight(summary(item))}{issue}</td></tr>')
         return '<table><thead><tr><th style="width:27%">법령 / 원문 링크</th><th style="width:24%">일정</th><th>개정 요약 · 공식 설명 발췌</th></tr></thead><tbody>' + ''.join(rows) + '</tbody></table>'
 
-    parts.extend(['<h2 id="weekly-laws">2. 금주 공포·시행 법령</h2>', version_table(report.weekly),
-                  f'<h2 id="upcoming-laws">3. 시행 예정 법령</h2><p>{report.today} ~ {report.horizon} (당일 시행 포함)</p>',
-                  version_table(report.upcoming, True), '<h2 id="core-laws">4. 핵심 법령 모니터링</h2>'])
+    key_dates = [v for v in report.upcoming if v.name in report.core_laws and
+                 v.effective and 0 <= (v.effective - report.today).days <= 30]
+    weekly_note = (f'<div class="notice"><strong>금주 확인 요점</strong><ul>'
+                   f'<li>점검 기간 내 공포·시행 확인: <strong>{len(report.weekly)}개 버전</strong></li>')
+    for v in key_dates[:4]:
+        days = (v.effective - report.today).days
+        label = '당일 시행' if days == 0 else f'D-{days}'
+        weekly_note += f'<li><strong class="important">{h(v.name)} · {h(v.effective)} 시행 ({label})</strong> — 상세 요약과 원문 링크는 시행 예정 표를 확인하세요.</li>'
+    if len(key_dates) > 4:
+        weekly_note += f'<li>그 밖의 30일 이내 핵심 법령 {len(key_dates) - 4}개 버전은 시행 예정 표에 수록했습니다.</li>'
+    weekly_note += '</ul></div>'
+    parts.extend(['<h2 class="chapter" id="weekly-laws">2. 금주 공포·시행 법령</h2>', weekly_note, version_table(report.weekly),
+                  f'<h2 class="chapter" id="upcoming-laws">3. 시행 예정 법령</h2><p>{report.today} ~ {report.horizon} (당일 시행 포함)</p>',
+                  version_table(report.upcoming, True), '<h2 class="chapter" id="core-laws">4. 핵심 법령 모니터링</h2>'])
     core = [item for item in report.analyses if item.version.name in report.core_laws]
     for idx, name in enumerate(report.core_laws):
         parts.append(f'<h3 id="core-law-{idx}">4-{idx + 1}) {h(name)}</h3>')
@@ -122,7 +140,7 @@ a {{ color: #00677c; }} .notice {{ background: #fff1d6; padding: 9px; }}
     if problems:
         parts.append('<ul class="notice">' + ''.join('<li>' + h(s) + '</li>' for s in problems) + '</ul>')
     parts.append('<ul>' + ''.join('<li>' + h(s) + '</li>' for s in report.manual_checks) + '</ul>')
-    parts.append('<p class="source">자료: 국가법령정보센터 공동활용 API. 설정된 대상만 조회하며 전체 84건 등록부는 아닙니다. 원문 데이터와 전체 기계 비교 결과는 실행 아티팩트 JSON에 보관합니다. 이 보고서는 정보 제공용입니다.</p></body></html>')
+    parts.append('<p class="source">자료: 국가법령정보센터 공동활용 API. 설정된 대상만 조회하며 전체 84건 등록부는 아닙니다. 원문 데이터와 전체 기계 비교 결과는 실행 아티팩트 JSON에 보관합니다. 이 보고서는 정보 제공용입니다.</p></main></body></html>')
     return ''.join(parts)
 
 
