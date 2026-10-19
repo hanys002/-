@@ -1,0 +1,10 @@
+title: 정보통신 법령 개정 모니터링 보고
+organization: 한영기술사사무소
+recipient: hanys002@gmail.com
+timezone: Asia/Seoul
+lookback_days: 7
+future_months: 6
+core_laws: [정보통신공사업법]
+laws: [정보통신공사업법]
+manual_checks:
+  - 이 보고서는 오프라인 테스트용 가상 데이터이며 실제 법령 변경 정보가 아닙니다.
