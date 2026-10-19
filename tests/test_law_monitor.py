@@ -119,6 +119,15 @@ class APIAndPipelineTests(unittest.TestCase):
         self.assertEqual(len(changes), 2)
         self.assertEqual(changes[1]['before'], '<신설>')
 
+    def test_current_baseline_does_not_require_older_version(self):
+        client = FixtureClient(FIXTURE / 'example.json')
+        versions = client.versions('정보통신공사업법')
+        client.versions = MagicMock(return_value=[replace(versions[0], amendment='일부개정'), versions[1]])
+        report = collect(client, CONFIG, TODAY)
+        self.assertFalse(report.incomplete)
+        self.assertTrue(any('현행 기준본' in item.comparison_note for item in report.analyses))
+        self.assertEqual(len(report.analyses[0].changes), 2)
+
     def test_calendar_six_month_boundary_and_today(self):
         sample = FixtureClient(FIXTURE / 'example.json').versions('정보통신공사업법')[0]
         client = MagicMock()

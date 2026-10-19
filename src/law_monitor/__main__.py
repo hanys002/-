@@ -45,6 +45,7 @@ def main(argv=None) -> int:
     mode.add_argument("--send", action="store_true", help="설정된 수신자에게 실제 발송")
     mode.add_argument("--dry-run", action="store_true", help="파일만 생성 (기본 동작)")
     parser.add_argument("--fixture", type=Path, help="오프라인 예시 JSON; 실제 발송 불가")
+    parser.add_argument("--github-annotations", action="store_true", help="실제 실행 진단을 GitHub 알림으로 기록")
     args = parser.parse_args(argv)
     if args.fixture and args.send:
         parser.error("--fixture 예시 데이터는 --send와 함께 사용할 수 없습니다")
@@ -67,7 +68,7 @@ def main(argv=None) -> int:
     report.demo = bool(args.fixture)
     def diagnostic(message, warning=False):
         print(message, flush=True)
-        if os.environ.get("GITHUB_ACTIONS") == "true":
+        if args.github_annotations and os.environ.get("GITHUB_ACTIONS") == "true":
             escaped = message.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
             level = 'warning' if warning else 'notice'
             print(f'::{level}::{escaped}', flush=True)

@@ -63,6 +63,8 @@ PDF에 명시된 법령과 핵심 법령의 시행령·시행규칙부터 추적
                      f'<p>공포 {h(v.announced)} · {h(v.kind)} 제{h(v.number)}호 · {h(v.amendment)}</p>')
         if item.error:
             parts.append(f'<p class="notice">{h(item.error)}</p>')
+        if item.comparison_note:
+            parts.append(f'<p>{h(item.comparison_note)}</p>')
         if item.detail:
             for label, value in [("개정이유·주요내용 (공식 원문)", item.detail.reason),
                                  ("개정문 (공식 원문)", item.detail.amendment_text),

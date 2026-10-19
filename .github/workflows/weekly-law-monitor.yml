@@ -34,7 +34,7 @@ jobs:
       - name: PDF 런타임 및 한글 글꼴 설치
         run: |
           sudo apt-get update
-          sudo apt-get install -y libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 fonts-noto-cjk
+          sudo apt-get install -y libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 fonts-noto-cjk poppler-utils
           python -m pip install -r requirements-law.txt
       - name: 법령 모니터링 테스트
         run: python -m unittest discover -s tests -p 'test_law*.py' -v
@@ -46,10 +46,24 @@ jobs:
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
           if [ "$DRY_RUN" = "true" ]; then
-            python -m src.law_monitor --dry-run
+            python -m src.law_monitor --dry-run --github-annotations
           else
-            python -m src.law_monitor --send
+            python -m src.law_monitor --send --github-annotations
           fi
+      - name: 실제 보고서 한글 PDF 확인
+        run: |
+          python - <<'PY'
+          import subprocess
+          from pathlib import Path
+          reports = list(Path('out/laws').glob('*.pdf'))
+          assert reports, 'PDF 없음'
+          for report in reports:
+              text = subprocess.check_output(['pdftotext', str(report), '-']).decode('utf-8')
+              assert '한영기술사사무소' in text, 'PDF 기관명 확인 실패'
+              assert '대상별 조회 상태' in text, 'PDF 조회 상태 확인 실패'
+              assert '예시 데이터' not in text, '실제 보고서에 예시 데이터 포함'
+          print('::notice::실제 PDF 검증 완료: 한글 기관명 및 대상별 조회 상태 확인')
+          PY
       - name: 보고서 보관 (실패·부분 조회 포함)
         if: always()
         uses: actions/upload-artifact@v4
