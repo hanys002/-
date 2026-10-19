@@ -96,7 +96,7 @@ def main(argv=None) -> int:
     except Exception as exc:
         print(f"PDF 생성 실패 ({type(exc).__name__}): WeasyPrint·Pango·한글 글꼴 설치를 확인하세요", file=sys.stderr)
         return 2
-    diagnostic(f"PDF 발송 전 검증 완료: {pages}페이지 (최대 10페이지), 한글 기관명·조회 상태 확인")
+    diagnostic(f"PDF 발송 전 검증 완료: 표지 포함 {pages}페이지 (최대 10페이지), 한글 기관명·조회 상태·목차 연결 및 페이지 번호 확인")
     print(f"보고서: {pdf_path}\n목록 조회: {len(laws) - report.failures}/{len(laws)}개 법령, "
           f"기간 내 {len(report.weekly)}개 버전 / 시행 예정 {len(report.upcoming)}개 버전")
     if report.failures == len(laws):
