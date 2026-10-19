@@ -33,6 +33,7 @@ class Report:
     organization: str = "한영기술사사무소"
     demo: bool = False
     core_laws: list[str] = field(default_factory=list)
+    volume: int = 2
 
     @property
     def failures(self) -> int:
@@ -113,4 +114,5 @@ def collect(client, config: dict, today: date) -> Report:
                   sorted(upcoming, key=lambda v: (v.effective or date.max, v.name)),
                   analyses, config.get("manual_checks", []), config["title"],
                   organization=config.get("organization", "한영기술사사무소"),
-                  core_laws=config.get("core_laws", []))
+                  core_laws=config.get("core_laws", []),
+                  volume=int(config.get("volume_base_number", 2)) + max(0, (today - date.fromisoformat(str(config.get("volume_base_date", today)))).days // 7))

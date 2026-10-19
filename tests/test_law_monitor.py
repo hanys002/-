@@ -19,6 +19,7 @@ from src.law_monitor.api import Detail, LawAPIError, LawClient, Version, parse_d
 from src.law_monitor.delivery import DeliveryError, send_report
 from src.law_monitor.pipeline import collect, compare
 from src.law_monitor.report import ReportValidationError, excerpt, render, write_pdf
+from src.law_monitor.design import highlight
 
 ROOT = Path(__file__).resolve().parent.parent
 FIXTURE = ROOT / 'tests/fixtures/law'
@@ -178,8 +179,9 @@ class APIAndPipelineTests(unittest.TestCase):
         item.changes = [{'article': f'제{i}조', 'before': 'OLD_FULL_TEXT ' * 1000,
                          'after': 'NEW_FULL_TEXT ' * 1000} for i in range(1, 63)]
         html = render(report)
-        self.assertLess(len(html), 15000)
-        self.assertIn('교육 기준을 정비함.', html)
+        from bs4 import BeautifulSoup
+        self.assertLess(len(BeautifulSoup(html, 'html.parser').get_text()), 15000)
+        self.assertIn('교육 기준을 정비함.', BeautifulSoup(html, 'html.parser').get_text())
         self.assertIn('일부 발췌', html)
         self.assertIn('변경 조문 62개', html)
         self.assertIn('외 54개', html)
@@ -194,6 +196,15 @@ class APIAndPipelineTests(unittest.TestCase):
         self.assertNotIn('배경 설명', result)
         combined = excerpt('[일부개정]\n◇ 개정이유 및 주요내용\n감리관리시스템 근거를 마련함.')
         self.assertEqual(combined, '감리관리시스템 근거를 마련함.')
+
+    def test_red_highlights_preserve_source_text_and_escape_markup(self):
+        from bs4 import BeautifulSoup
+        value = '교육 의무를 신설하고 공사대금 보증을 정비함. <script>예시</script>'
+        html = highlight(value)
+        soup = BeautifulSoup(html, 'html.parser')
+        self.assertEqual(soup.get_text(), value)
+        self.assertIsNone(soup.find('script'))
+        self.assertIn('교육', [s.get_text() for s in soup.select('strong.important')])
 
     def test_failed_baseline_does_not_claim_zero_changed_articles(self):
         client = FixtureClient(FIXTURE / 'example.json')
@@ -270,6 +281,9 @@ class DeliveryAndCLITests(unittest.TestCase):
             from pypdf import PdfReader
             reader = PdfReader(pdf)
             self.assertLessEqual(len(reader.pages), 10)
+            self.assertIn('목 차', reader.pages[0].extract_text())
+            for key in ('monitor-status', 'weekly-laws', 'upcoming-laws', 'core-laws', 'source-status'):
+                self.assertGreaterEqual(reader.get_destination_page_number(reader.named_destinations[key]), 1)
             self.assertIn('한영기술사사무소', ''.join(page.extract_text() for page in reader.pages))
             self.assertTrue(any(page.get('/Annots') for page in reader.pages))
             data = json.loads(next(Path(folder).glob('*.json')).read_text())

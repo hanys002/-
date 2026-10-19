@@ -1,6 +1,8 @@
 # 첨부 Vol.2에 명시된 법령 + 핵심 법령의 하위법령. 전체 84건 등록부는 아님.
 title: 정보통신 법령 개정 모니터링 보고
 organization: 한영기술사사무소
+volume_base_date: '2026-10-19'
+volume_base_number: 2
 recipient: hanys002@gmail.com
 timezone: Asia/Seoul
 lookback_days: 7
