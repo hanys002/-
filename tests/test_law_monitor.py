@@ -17,6 +17,7 @@ import yaml
 from src.law_monitor.__main__ import FixtureClient, main
 from src.law_monitor.api import Detail, LawAPIError, LawClient, Version, parse_detail
 from src.law_monitor.delivery import DeliveryError, send_report
+from src.law_monitor.email_report import EmailRenderError, MAX_EMAIL_BYTES, render_email, validate_email
 from src.law_monitor.pipeline import collect, compare
 from src.law_monitor.report import ReportValidationError, excerpt, render, write_pdf
 from src.law_monitor.design import highlight
@@ -216,6 +217,38 @@ class APIAndPipelineTests(unittest.TestCase):
         self.assertIsNone(soup.find('script'))
         self.assertIn('교육', [s.get_text() for s in soup.select('strong.important')])
 
+    def test_email_html_uses_gmail_safe_inline_layout(self):
+        from bs4 import BeautifulSoup
+        report = collect(FixtureClient(FIXTURE / 'example.json'), CONFIG, TODAY)
+        report.analyses[0].detail.reason = '<script>위험</script> 교육 의무와 지급보증 신설'
+        html = render_email(report)
+        soup = BeautifulSoup(html, 'html.parser')
+        self.assertFalse(soup.select('style, svg, img, script'))
+        self.assertNotIn('@page', html)
+        self.assertNotIn('position:', html)
+        self.assertNotIn('data:image', html)
+        self.assertIn('첨부 PDF', soup.get_text())
+        self.assertIn('한영기술사사무소', soup.get_text())
+        self.assertIn(report.analyses[0].version.url, html)
+        self.assertGreaterEqual(len(soup.select('table[role="presentation"]')), 5)
+        self.assertTrue(all(tag.get('style') for tag in soup.select('table, td')))
+        # Gmail이 class와 head를 제거해도 본문 구조와 핵심 정보가 남아야 한다.
+        if soup.head:
+            soup.head.decompose()
+        for tag in soup.find_all(True):
+            tag.attrs.pop('class', None)
+        sanitized = str(soup)
+        self.assertIn('정보통신 법령 개정 모니터링 보고', sanitized)
+        self.assertIn('시행 예정 법령', sanitized)
+        self.assertLessEqual(validate_email(html, report), MAX_EMAIL_BYTES)
+
+    def test_email_validation_rejects_print_css_and_oversized_body(self):
+        report = collect(FixtureClient(FIXTURE / 'example.json'), CONFIG, TODAY)
+        with self.assertRaises(EmailRenderError):
+            validate_email('<style>@page{}</style><p>첨부 PDF</p>', report)
+        with self.assertRaisesRegex(EmailRenderError, '안전 한도'):
+            validate_email('<p>' + ('가' * MAX_EMAIL_BYTES) + '</p>', report)
+
     def test_failed_baseline_does_not_claim_zero_changed_articles(self):
         client = FixtureClient(FIXTURE / 'example.json')
         original = client.detail
@@ -299,8 +332,26 @@ class DeliveryAndCLITests(unittest.TestCase):
             data = json.loads(next(Path(folder).glob('*.json')).read_text())
             self.assertTrue(data['demo'])
             self.assertEqual(len(data['upcoming']), 1)
-            self.assertIn('실제 조회 아님', next(Path(folder).glob('*.html')).read_text())
+            print_html = next(p for p in Path(folder).glob('*.html') if not p.name.endswith('_email.html'))
+            email_html = next(Path(folder).glob('*_email.html'))
+            self.assertIn('실제 조회 아님', print_html.read_text())
+            self.assertIn('첨부 PDF', email_html.read_text())
+            self.assertNotIn('@page', email_html.read_text())
         send.assert_not_called()
+
+    @patch('src.law_monitor.__main__.write_pdf', return_value=2)
+    @patch('src.law_monitor.__main__.send_report')
+    @patch('src.law_monitor.__main__.LawClient')
+    def test_cli_send_uses_email_layout_not_pdf_layout(self, client, send, write_pdf_mock):
+        client.return_value = FixtureClient(FIXTURE / 'example.json')
+        with tempfile.TemporaryDirectory() as folder:
+            code = main(['--send', '--date', TODAY.isoformat(), '--config',
+                         str(FIXTURE / 'config.yaml'), '--output', folder])
+        self.assertEqual(code, 0)
+        mail_html = send.call_args.args[2]
+        self.assertIn('첨부 PDF', mail_html)
+        self.assertNotIn('@page', mail_html)
+        self.assertNotIn('class="cover"', mail_html)
 
     @patch('src.law_monitor.__main__.write_pdf')
     @patch('src.law_monitor.__main__.send_report')

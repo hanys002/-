@@ -26,7 +26,8 @@ concurrency:
 
 jobs:
   monitor:
-    runs-on: ubuntu-latest
+    # ubuntu-latest 이미지 전환 중 패키지 설치 지연을 피하고 PDF 런타임을 고정한다.
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
