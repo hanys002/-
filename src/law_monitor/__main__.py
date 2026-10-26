@@ -12,6 +12,7 @@ import yaml
 
 from .api import Detail, LawAPIError, LawClient, Version
 from .delivery import DeliveryError, send_report
+from .email_report import EmailRenderError, render_email, validate_email
 from .pipeline import collect
 from .report import ReportValidationError, render, write_pdf
 
@@ -83,10 +84,18 @@ def main(argv=None) -> int:
     args.output.mkdir(parents=True, exist_ok=True)
     stem = ("EXAMPLE_" if report.demo else "") + f"정보통신_법령개정_모니터링_{today}"
     html_path = args.output / f"{stem}.html"
+    email_html_path = args.output / f"{stem}_email.html"
     pdf_path = args.output / f"{stem}.pdf"
     data_path = args.output / f"{stem}.json"
     html = render(report)
+    email_html = render_email(report)
+    try:
+        email_size = validate_email(email_html, report)
+    except EmailRenderError as exc:
+        diagnostic(str(exc), warning=True)
+        return 2
     html_path.write_text(html, encoding="utf-8")
+    email_html_path.write_text(email_html, encoding="utf-8")
     data_path.write_text(json.dumps(report.as_dict(), ensure_ascii=False, indent=2, default=str), encoding="utf-8")
     try:
         pages = write_pdf(html, pdf_path, organization=report.organization)
@@ -97,6 +106,7 @@ def main(argv=None) -> int:
         print(f"PDF 생성 실패 ({type(exc).__name__}): WeasyPrint·Pango·한글 글꼴 설치를 확인하세요", file=sys.stderr)
         return 2
     diagnostic(f"PDF 발송 전 검증 완료: 표지 포함 {pages}페이지 (최대 10페이지), 한글 기관명·조회 상태·목차 연결 및 페이지 번호 확인")
+    diagnostic(f"Gmail 본문 검증 완료: {email_size}바이트, 인쇄 전용 요소·내장 이미지 없음")
     print(f"보고서: {pdf_path}\n목록 조회: {len(laws) - report.failures}/{len(laws)}개 법령, "
           f"기간 내 {len(report.weekly)}개 버전 / 시행 예정 {len(report.upcoming)}개 버전")
     if report.failures == len(laws):
@@ -108,7 +118,7 @@ def main(argv=None) -> int:
             return 1
         subject = f"[정보통신 법령·요약본] {today} 주간 모니터링"
         try:
-            send_report(cfg["recipient"], subject, html, pdf_path,
+            send_report(cfg["recipient"], subject, email_html, pdf_path,
                         organization=report.organization)
         except DeliveryError as exc:
             print(str(exc), file=sys.stderr)
