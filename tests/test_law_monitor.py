@@ -129,6 +129,16 @@ class APIAndPipelineTests(unittest.TestCase):
         self.assertTrue(any('현행 기준본' in item.comparison_note for item in report.analyses))
         self.assertEqual(len(report.analyses[0].changes), 2)
 
+    def test_recent_core_law_without_previous_version_still_reports(self):
+        source = FixtureClient(FIXTURE / 'example.json')
+        latest = source.versions('정보통신공사업법')[1]
+        source.versions = MagicMock(return_value=[latest])
+        report = collect(source, CONFIG, date(2026, 10, 26))
+        self.assertFalse(report.incomplete)
+        self.assertEqual(len(report.weekly), 1)
+        self.assertIn('이전 시행 버전', report.analyses[0].comparison_note)
+        self.assertIn('법령 원문 링크', report.analyses[0].comparison_note)
+
     def test_calendar_six_month_boundary_and_today(self):
         sample = FixtureClient(FIXTURE / 'example.json').versions('정보통신공사업법')[0]
         client = MagicMock()

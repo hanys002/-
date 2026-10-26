@@ -105,7 +105,7 @@ def collect(client, config: dict, today: date) -> Report:
                         analysis.changes = compare(old, analysis.detail)
                         analysis.previous = baseline
                     elif version.amendment != "제정":
-                        analysis.error = (analysis.error + " / " if analysis.error else "") + "비교할 이전 시행 버전 없음"
+                        analysis.comparison_note = "API에서 비교할 이전 시행 버전을 확인하지 못했습니다. 현재 개정의 공식 요약·본문·부칙은 법령 원문 링크에서 확인하세요."
             except LawAPIError as exc:
                 analysis.error = str(exc)
             analyses.append(analysis)

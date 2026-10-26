@@ -78,15 +78,21 @@ jobs:
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
+          set +e
           if [ "$DRY_RUN" = "true" ]; then
             python -m src.law_monitor --dry-run --github-annotations
-            echo "generated=true" >> "$GITHUB_OUTPUT"
-            echo "sent=false" >> "$GITHUB_OUTPUT"
+            status=$?
+            sent=false
           else
             python -m src.law_monitor --send --github-annotations
-            echo "generated=true" >> "$GITHUB_OUTPUT"
-            echo "sent=true" >> "$GITHUB_OUTPUT"
+            status=$?
+            if [ "$status" -eq 0 ]; then sent=true; else sent=false; fi
           fi
+          set -e
+          if compgen -G 'out/laws/*.pdf' > /dev/null; then generated=true; else generated=false; fi
+          echo "generated=$generated" >> "$GITHUB_OUTPUT"
+          echo "sent=$sent" >> "$GITHUB_OUTPUT"
+          exit "$status"
       - name: 오늘 발송 완료 기록 생성
         if: steps.report.outputs.sent == 'true'
         run: |
@@ -99,7 +105,7 @@ jobs:
           path: .law-mail-lock
           key: law-mail-${{ steps.delivery_date.outputs.kst }}
       - name: 실제 보고서 한글 PDF 확인
-        if: steps.report.outputs.generated == 'true'
+        if: always() && steps.report.outputs.generated == 'true'
         run: |
           python - <<'PY'
           import subprocess
