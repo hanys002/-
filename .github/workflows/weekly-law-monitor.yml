@@ -2,12 +2,18 @@ name: 정보통신 법령개정 주간 모니터링
 
 on:
   schedule:
-    # 월요일 09:00 KST. GitHub Actions 대기 상황에 따라 지연될 수 있음.
-    - cron: '0 0 * * 1'
+    # GitHub는 매시 정각 예약이 지연·누락될 수 있어 정각을 피한다.
+    # 09:17 KST 1차 실행, 11:17 KST 보완 실행. 아래 일자 잠금으로 한 번만 발송한다.
+    - cron: '17 0 * * 1'
+    - cron: '17 2 * * 1'
   workflow_dispatch:
     inputs:
       dry_run:
         description: '메일 발송 없이 HTML/PDF만 생성'
+        type: boolean
+        default: false
+      force_send:
+        description: '오늘 이미 발송했어도 다시 발송'
         type: boolean
         default: false
 
@@ -24,7 +30,30 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+      - name: 한국 날짜 발송 키 생성
+        id: delivery_date
+        run: echo "kst=$(TZ=Asia/Seoul date +%F)" >> "$GITHUB_OUTPUT"
+      - name: 오늘 발송 기록 확인
+        id: delivery_lock
+        uses: actions/cache/restore@v4
+        with:
+          path: .law-mail-lock
+          key: law-mail-${{ steps.delivery_date.outputs.kst }}
+      - name: 중복 발송 여부 결정
+        id: guard
+        env:
+          CACHE_HIT: ${{ steps.delivery_lock.outputs.cache-hit }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          FORCE_SEND: ${{ inputs.force_send }}
+        run: |
+          if [ "$CACHE_HIT" = "true" ] && [ "$DRY_RUN" != "true" ] && [ "$FORCE_SEND" != "true" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::${{ steps.delivery_date.outputs.kst }} 법령 메일은 이미 발송되어 중복 발송을 생략합니다."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/setup-python@v5
+        if: steps.guard.outputs.skip != 'true'
         with:
           python-version: '3.12'
           cache: pip
@@ -32,25 +61,51 @@ jobs:
             requirements.txt
             requirements-law.txt
       - name: PDF 런타임 및 한글 글꼴 설치
+        if: steps.guard.outputs.skip != 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 fonts-noto-cjk poppler-utils
           python -m pip install -r requirements-law.txt
       - name: 법령 모니터링 테스트
+        if: steps.guard.outputs.skip != 'true'
         run: python -m unittest discover -s tests -p 'test_law*.py' -v
       - name: 법령 조회 및 보고서 발송
+        id: report
+        if: steps.guard.outputs.skip != 'true'
         env:
           LAW_API_OC: ${{ vars.LAW_API_OC || secrets.LAW_API_OC }}
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
+          set +e
           if [ "$DRY_RUN" = "true" ]; then
             python -m src.law_monitor --dry-run --github-annotations
+            status=$?
+            sent=false
           else
             python -m src.law_monitor --send --github-annotations
+            status=$?
+            if [ "$status" -eq 0 ]; then sent=true; else sent=false; fi
           fi
+          set -e
+          if compgen -G 'out/laws/*.pdf' > /dev/null; then generated=true; else generated=false; fi
+          echo "generated=$generated" >> "$GITHUB_OUTPUT"
+          echo "sent=$sent" >> "$GITHUB_OUTPUT"
+          exit "$status"
+      - name: 오늘 발송 완료 기록 생성
+        if: steps.report.outputs.sent == 'true'
+        run: |
+          mkdir -p .law-mail-lock
+          printf '%s\n' "run=${{ github.run_id }}" "kst_date=${{ steps.delivery_date.outputs.kst }}" > .law-mail-lock/delivery.txt
+      - name: 오늘 발송 완료 기록 저장
+        if: steps.report.outputs.sent == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .law-mail-lock
+          key: law-mail-${{ steps.delivery_date.outputs.kst }}
       - name: 실제 보고서 한글 PDF 확인
+        if: always() && steps.report.outputs.generated == 'true'
         run: |
           python - <<'PY'
           import subprocess
@@ -65,7 +120,7 @@ jobs:
           print('::notice::실제 PDF 검증 완료: 한글 기관명 및 대상별 조회 상태 확인')
           PY
       - name: 보고서 보관 (실패·부분 조회 포함)
-        if: always()
+        if: always() && steps.report.outputs.generated == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: law-monitor-${{ github.run_id }}-${{ github.run_attempt }}
