@@ -3,3 +3,10 @@ __pycache__/
 .venv/
 out/
 .env
+# 공개 저장소: 삼성노트 원본·추출본을 실수로 커밋하지 않도록
+samsung-notes/inbox/*
+!samsung-notes/inbox/.gitkeep
+samsung-notes/notes/
+samsung-notes/manifest.json
+samsung-notes/index.json
+samsung-notes/index.html

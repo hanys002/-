@@ -1,5 +1,7 @@
 # 기술사 채용공고 데일리 브리핑
 
+> **삼성노트 검색·클라우드·Claude 연동 추가:** 삼성노트에서 내보낸 PDF·Word·이미지·.sdocx를 Google Drive/OneDrive에서 가져와 검색 색인을 만들고 Claude에서 찾아보는 기능은 [삼성노트 연동 안내](docs/samsung-notes.md)를 참고하세요.
+
 > **정보통신 법령개정 모니터링 추가:** 매주 월요일 오전 9시(KST), `hanys002@gmail.com`으로 HTML 보고서와 PDF를 보내는 별도 기능은 [법령 모니터링 설정 안내](docs/law-monitor.md)를 참고하세요.
 
 **정보통신기술사 · 산업계측제어기술사 · 전자응용기술사** 채용공고를 매일 **09:00(KST)** 에

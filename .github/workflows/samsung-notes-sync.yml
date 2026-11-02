@@ -1,0 +1,149 @@
+name: 삼성노트 동기화·검색
+
+# 삼성노트 → (내보내기) → Google Drive/OneDrive 폴더 → 이 워크플로 → 검색 색인
+#
+# 이 저장소는 '공개'다. 노트 원문이 공개되지 않도록 노트 데이터는
+# 비공개 데이터 저장소(vars.NOTES_DATA_REPO)에만 커밋한다.
+# 설정 안내: docs/samsung-notes.md
+
+on:
+  schedule:
+    # 6시간마다(KST 02:23, 08:23, 14:23, 20:23). 정각 혼잡을 피해 23분.
+    # 예약 실행은 기본 브랜치(main)에 있는 워크플로만 동작한다.
+    - cron: '23 5,11,17,23 * * *'
+  workflow_dispatch:
+    inputs:
+      query:
+        description: '검색어 (비우면 동기화만). 결과는 실행 요약에 표시 — 비공개 저장소에서만 허용'
+        type: string
+        default: ''
+      force:
+        description: '변경 없는 파일도 다시 추출'
+        type: boolean
+        default: false
+      prune:
+        description: '클라우드에서 지운 원본의 노트도 삭제'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: samsung-notes
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      IS_PUBLIC: ${{ github.event.repository.private != true }}
+      DATA_REPO: ${{ vars.NOTES_DATA_REPO }}
+      ALLOW_PUBLIC: ${{ vars.NOTES_ALLOW_PUBLIC == 'true' }}
+      NOTES_REMOTE: ${{ vars.NOTES_REMOTE }}
+      HAS_RCLONE: ${{ secrets.RCLONE_CONFIG != '' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 공개 저장소 노출 방지 점검
+        run: |
+          if [ "$IS_PUBLIC" = "true" ] && [ -z "$DATA_REPO" ] && [ "$ALLOW_PUBLIC" != "true" ]; then
+            echo "::error::이 저장소는 공개입니다. 노트가 공개되지 않도록 비공개 데이터 저장소를"
+            echo "::error::Variables → NOTES_DATA_REPO (예: hanys002/samsung-notes-data) 로 지정하세요."
+            echo "::error::안내: docs/samsung-notes.md"
+            exit 1
+          fi
+          if [ "$HAS_RCLONE" != "true" ] && [ -n "$DATA_REPO" ]; then
+            echo "::notice::RCLONE_CONFIG 미설정 — 데이터 저장소 inbox/ 의 파일만 처리합니다."
+          fi
+
+      - name: 비공개 데이터 저장소 체크아웃
+        if: env.DATA_REPO != ''
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.NOTES_DATA_REPO }}
+          token: ${{ secrets.NOTES_DATA_TOKEN }}
+          path: notes-data
+
+      - name: 노트 위치 결정
+        run: |
+          if [ -n "$DATA_REPO" ]; then
+            echo "NOTES_HOME=$GITHUB_WORKSPACE/notes-data" >> "$GITHUB_ENV"
+          else
+            echo "NOTES_HOME=$GITHUB_WORKSPACE/samsung-notes" >> "$GITHUB_ENV"
+          fi
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements-notes.txt
+
+      - name: 의존성 설치 (OCR 포함)
+        run: |
+          pip install -r requirements-notes.txt
+          sudo apt-get update -qq
+          # 손글씨·이미지 쪽 OCR(한국어+영어), PDF 쪽 렌더링, 클라우드 동기화
+          sudo apt-get install -y -qq tesseract-ocr tesseract-ocr-kor poppler-utils rclone
+
+      - name: 테스트
+        run: python tests/test_samsung_notes.py
+
+      - name: 클라우드 폴더 내려받기 (Google Drive / OneDrive)
+        if: env.HAS_RCLONE == 'true' && env.NOTES_REMOTE != ''
+        env:
+          RCLONE_CONFIG_TEXT: ${{ secrets.RCLONE_CONFIG }}
+        run: |
+          mkdir -p ~/.config/rclone
+          printf '%s\n' "$RCLONE_CONFIG_TEXT" > ~/.config/rclone/rclone.conf
+          chmod 600 ~/.config/rclone/rclone.conf
+          dest="$RUNNER_TEMP/cloud"
+          rclone copy "$NOTES_REMOTE" "$dest" \
+            --include "*.{pdf,PDF,docx,pptx,txt,md,html,htm,sdocx,jpg,jpeg,png,webp}" \
+            --max-size 50M --transfers 4 --stats-one-line -v
+          echo "NOTES_CLOUD_DIR=$dest" >> "$GITHUB_ENV"
+          # rclone 이 갱신한 토큰도 다음 실행에 쓰이도록 남기지 않는다(시크릿 원본 유지).
+          rm -f ~/.config/rclone/rclone.conf
+
+      - name: 본문 추출·색인
+        run: |
+          python -m src.samsung_notes ingest \
+            ${{ inputs.force && '--force' || '' }} \
+            ${{ inputs.prune && env.NOTES_CLOUD_DIR != '' && '--prune' || '' }}
+          python -m src.samsung_notes stats
+
+      - name: 노트 커밋
+        run: |
+          cd "$NOTES_HOME"
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A -f notes manifest.json index.json
+          if git diff --cached --quiet; then
+            echo "변경 없음 — 커밋 생략"
+          else
+            git commit -m "chore(notes): 삼성노트 동기화 $(date -u +%Y-%m-%dT%H:%MZ) [skip ci]"
+            git push
+          fi
+
+      - name: 검색
+        if: inputs.query != ''
+        env:
+          QUERY: ${{ inputs.query }}
+        run: |
+          if [ "$IS_PUBLIC" = "true" ] && [ "$ALLOW_PUBLIC" != "true" ]; then
+            echo "::error::공개 저장소의 실행 로그·요약은 누구나 볼 수 있어 검색 결과를 출력하지 않습니다."
+            echo "::error::검색은 데이터 저장소의 index.html, Claude, GitHub 검색 또는 로컬 CLI를 사용하세요."
+            exit 1
+          fi
+          python -m src.samsung_notes search "$QUERY" -n 30
+
+      - name: 검색 페이지 생성 (데이터 저장소 index.html)
+        run: |
+          python -m src.samsung_notes site --out "$NOTES_HOME"
+          cd "$NOTES_HOME"
+          git add -f index.html
+          if ! git diff --cached --quiet; then
+            git commit -m "chore(notes): 검색 페이지 갱신 [skip ci]" && git push
+          fi
