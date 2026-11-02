@@ -73,6 +73,9 @@ def run() -> None:
         docs = ing.load_index()
         assert len(docs) == 3 and titles("TSN") == ["기술사 2차 면접 준비"]
 
+        # 삼성노트 내보내기 파일명 꼬리(_YYMMDD_HHMMSS) 제거
+        assert ing._title(Path("(삼성노트) 주간회의260811_260818_164255.pdf"), "") == "(삼성노트) 주간회의260811"
+
         # .pptx (삼성노트 'PowerPoint로 내보내기')
         import zipfile
         from src.samsung_notes.extract import extract

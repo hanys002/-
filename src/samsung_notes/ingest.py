@@ -34,7 +34,8 @@ def slugify(s: str) -> str:
 
 
 def _title(path: Path, text: str) -> str:
-    stem = path.stem
+    # 삼성노트 '파일로 저장'은 '제목_YYMMDD_HHMMSS' 로 저장한다(실측: '…주간회의260811_260818_164255.pdf').
+    stem = re.sub(r"_\d{6}_\d{6}$", "", path.stem) or path.stem
     # 삼성노트 기본 파일명(예: 'Samsung Notes_20261102_101500', '노트_2026...')이면 첫 줄 사용
     if re.fullmatch(r"(samsung ?notes?|노트|note)[_ -]?[\d_ -]*", stem, re.I) or stem.isdigit():
         for line in text.splitlines():

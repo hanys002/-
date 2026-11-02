@@ -70,7 +70,7 @@
 |---|---|---|
 | Variable | `NOTES_DATA_REPO` | `hanys002/samsung-notes-data` |
 | Secret | `NOTES_DATA_TOKEN` | 2-2의 토큰 |
-| Variable | `NOTES_REMOTE` | (클라우드 사용 시) 예: `gdrive:SamsungNotes` 또는 `onedrive:SamsungNotes` |
+| Variable | `NOTES_REMOTE` | (클라우드 사용 시) 예: `gdrive:5. 삼성 노트` (Google Drive 「5. 삼성 노트」 폴더) 또는 `onedrive:SamsungNotes` |
 | Secret | `RCLONE_CONFIG` | (클라우드 사용 시) 2-4의 `rclone.conf` 전체 내용 |
 
 ### 2-4. 클라우드 연결 (Google Drive 또는 OneDrive)
@@ -86,7 +86,7 @@ rclone config
 - 브라우저 인증 완료 후 확인:
 
 ```bash
-rclone lsf gdrive:SamsungNotes
+rclone lsf "gdrive:5. 삼성 노트"
 ```
 
 ```bash
