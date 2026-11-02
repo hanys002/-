@@ -107,7 +107,7 @@ rclone config file
 ## 3. 휴대폰에서 매일 쓰는 방법
 
 1. 삼성노트에서 노트 열기 → **⋮ / 공유** → **파일로 저장** 또는 **공유 → PDF 파일**
-2. 공유 대상에서 **Drive**(또는 OneDrive) → `SamsungNotes` 폴더 → 업로드
+2. 공유 대상에서 **Drive**(또는 OneDrive) → 「5. 삼성 노트」 폴더 → 업로드
 3. 최대 6시간 내 자동 반영(급하면 GitHub 앱에서 *Run workflow*)
 
 여러 노트는 목록에서 길게 눌러 다중 선택 후 한꺼번에 PDF로 공유할 수 있습니다.
@@ -122,7 +122,7 @@ rclone config file
 
 - **claude.ai / Claude 앱**: GitHub 커넥터에서 `samsung-notes-data` 를 연결하면
   "삼성노트에서 OPC UA 관련 내용 찾아 요약해 줘"처럼 질의할 수 있습니다.
-  Google Drive 커넥터가 연결되어 있으면 `SamsungNotes` 폴더의 원본 PDF도 직접 읽습니다.
+  Google Drive 커넥터가 연결되어 있으면 「5. 삼성 노트」 폴더의 원본 PDF도 직접 읽습니다.
 - **Claude Code**: 이 저장소의 `CLAUDE.md` 에 검색 방법이 적혀 있어 다음처럼 요청하면 됩니다.
   "데이터 저장소를 클론해서 삼성노트에서 '접지저항' 찾아줘".
 

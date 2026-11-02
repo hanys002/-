@@ -12,7 +12,7 @@
    ```
    문법: 공백=AND, `"구절"`, `-제외`, `tag:태그`. 결과의 `note` 경로(`notes/*.md`)를 읽어 답한다.
 3. front-matter 의 `quality` 가 `ocr`(손글씨 인식)·`estimated`(.sdocx 추정)이면 원문과 다를 수 있다고 밝힌다.
-4. 원본 PDF가 필요하면 Google Drive 커넥터로 `SamsungNotes` 폴더를 찾는다(`source` 필드가 파일명).
+4. 원본 PDF가 필요하면 Google Drive 커넥터로 「5. 삼성 노트」 폴더를 찾는다(`source` 필드가 파일명).
 5. 노트 내용을 이 **공개** 저장소에 커밋하거나 공개 Artifact·이슈·PR 본문에 옮기지 않는다.
 
 설정·운영: `docs/samsung-notes.md` · 테스트: `python tests/test_samsung_notes.py`
